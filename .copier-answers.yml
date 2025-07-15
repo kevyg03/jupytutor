@@ -1,0 +1,15 @@
+# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
+_commit: v4.3.8
+_src_path: https://github.com/jupyterlab/extension-template
+author_email: kevin.gillespie@berkeley.edu
+author_name: Kevin Gillespie
+has_binder: true
+has_settings: false
+kind: frontend
+labextension_name: jupytutor
+project_short_description: A Jupyter extension for providing students LLM feedback
+    based on autograder results and supplied course context.
+python_name: jupytutor
+repository: https://github.com/kevyg03/jupytutor
+test: true
+
