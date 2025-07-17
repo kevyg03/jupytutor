@@ -1,0 +1,65 @@
+/* Use a container class to avoid style collisions with JupyterLab */
+.jupytutor {
+  background-color: var(--jp-layout-color1);
+  padding: 12px;
+  border: 1px solid #ccc;
+  margin-top: 5px;
+  border-radius: 4px;
+  font-family: var(--jp-ui-font-family); /* Use JupyterLab's theme variables! */
+}
+
+.jupytutor label {
+  font-weight: bold;
+  margin-right: 8px;
+}
+
+.jupytutor button {
+  /* Use JupyterLab's themed button style for a native look and feel */
+  background-color: var(--jp-brand-color1);
+  color: white;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 3px;
+  margin-left: 5px;
+}
+
+.jupytutor button:hover {
+  background-color: var(--jp-brand-color0);
+}
+
+.jupytutor p {
+  margin-top: 10px;
+  font-style: italic;
+  color: var(--jp-content-font-color2);
+}
+
+.tailoredOptionsContainer {
+  flex-direction: row;
+  justify-content: center;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.tailoredOption {
+  background-color: var(--jp-layout-color1);
+  width: 100px;
+  height: 80px;
+  display: inline-block;
+  padding: 5px;
+  margin: 5px;
+  border: 1px solid #ccc;
+  border-color: var(--jp-border-color0);
+  box-shadow: 0px 0px 1px var(--jp-shadow-penumbra-color);
+  border-radius: 15px;
+  font-family: var(--jp-ui-font-family); /* Use JupyterLab's theme variables! */
+  align-items: center;
+  justify-content: center;
+}
+.tailoredOption:hover {
+  opacity: 0.75;
+}
+.tailoredOption h4 {
+  font-size: var(--jp-ui-font-size1);
+  font-style: normal;
+  color: var(--jp-ui-font-color1);
+}
