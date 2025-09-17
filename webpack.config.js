@@ -38,10 +38,32 @@ module.exports = {
     alias: {
       react: path.resolve(__dirname, 'node_modules/react'),
       'react-dom': path.resolve(__dirname, 'node_modules/react-dom')
+    },
+    fallback: {
+      fs: false,
+      path: false,
+      os: false,
+      crypto: false,
+      stream: false,
+      util: false,
+      buffer: false,
+      events: false,
+      assert: false,
+      constants: false,
+      domain: false,
+      punycode: false,
+      querystring: false,
+      string_decoder: false,
+      sys: false,
+      timers: false,
+      tty: false,
+      url: false,
+      vm: false,
+      zlib: false
     }
   },
 
   // Exclude JupyterLab and Lumino packages from the bundle.
   // They are already provided by JupyterLab itself.
-  externals: [/^@jupyterlab\/.+$/, /^@lumino\/.+$/]
+  externals: [/^@jupyterlab\/.+$/, /^@lumino\/.+$/, 'jsdom']
 };

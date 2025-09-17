@@ -1,11 +1,28 @@
 /* Use a container class to avoid style collisions with JupyterLab */
 .jupytutor {
-  background-color: var(--jp-layout-color1);
+  background-color: transparent;
   padding: 12px;
-  border: 1px solid #ccc;
+  border: none;
   margin-top: 5px;
-  border-radius: 4px;
+  border-radius: 0;
   font-family: var(--jp-ui-font-family); /* Use JupyterLab's theme variables! */
+  transition: all 0.3s ease;
+}
+
+/* Loading state for the entire jupytutor container */
+.jupytutor.loading {
+  animation: subtleGlow 3s ease-in-out infinite;
+}
+
+/* Subtle glow animation for the container */
+@keyframes subtleGlow {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.02);
+  }
 }
 
 .jupytutor label {
@@ -34,32 +51,596 @@
 }
 
 .tailoredOptionsContainer {
+  display: flex;
   flex-direction: row;
-  justify-content: center;
+  justify-content: flex-start;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
+  gap: 4px;
+  margin: 2px 0 6px 0;
+  padding: 3px 0 3px 6px;
+  background: transparent;
+  border: none;
+  border-left: 2px solid var(--jp-border-color0);
+  box-shadow: none;
+  animation: fadeUpIn 0.6s ease-out;
+  transition:
+    all 0.3s ease,
+    border-left-color 0.2s ease;
+  max-width: 100%;
+}
+
+/* Subtle border color change on hover for better integration */
+.tailoredOptionsContainer:hover {
+  border-left-color: var(--jp-border-color1);
+}
+
+/* Loading state for suggestions */
+.tailoredOptionsContainer.loading {
+  animation: suggestionsPulse 2s ease-in-out infinite;
+}
+
+@keyframes suggestionsPulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.8;
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes fadeUpIn {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .tailoredOption {
-  background-color: var(--jp-layout-color1);
-  width: 100px;
-  height: 80px;
-  display: inline-block;
-  padding: 5px;
-  margin: 5px;
-  border: 1px solid #ccc;
-  border-color: var(--jp-border-color0);
-  box-shadow: 0px 0px 1px var(--jp-shadow-penumbra-color);
-  border-radius: 15px;
-  font-family: var(--jp-ui-font-family); /* Use JupyterLab's theme variables! */
+  background: transparent;
+  width: 120px;
+  min-height: 32px;
+  display: flex;
   align-items: center;
   justify-content: center;
-}
-.tailoredOption:hover {
-  opacity: 0.75;
-}
-.tailoredOption h4 {
+  padding: 6px 8px;
+  margin: 0;
+  border: 1px solid var(--jp-border-color0);
+  border-radius: 16px;
+  font-family: var(--jp-ui-font-family);
   font-size: var(--jp-ui-font-size1);
-  font-style: normal;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: none;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.tailoredOption::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(var(--jp-brand-color1-rgb, 0, 123, 255), 0.1),
+    transparent
+  );
+  transition: left 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tailoredOption:hover {
+  background-color: var(--jp-layout-color2);
+  border-color: var(--jp-border-color1);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(var(--jp-brand-color1-rgb, 0, 123, 255), 0.15);
+}
+
+.tailoredOption:hover::before {
+  left: 100%;
+}
+
+.tailoredOption:active {
+  transform: translateY(0);
+  background-color: var(--jp-layout-color3);
+}
+
+.tailoredOption h4 {
+  margin: 0;
+  padding: 0;
+  font-size: var(--jp-ui-font-size1);
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: center;
+  word-wrap: break-word;
+  hyphens: auto;
+  max-width: 100%;
+}
+
+/* Chat Bubble Styles */
+.chat-container {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 100%;
+  max-height: 500px;
+  overflow-y: auto;
+  padding-right: 8px;
+  padding-bottom: 0;
+  padding-top: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--jp-border-color0) transparent;
+  /* Smooth scrolling */
+  scroll-behavior: smooth;
+  /* Add subtle edge indicator */
+  border-top: 0.5px solid var(--jp-border-color0);
+}
+
+.chat-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-container::-webkit-scrollbar-thumb {
+  background-color: var(--jp-border-color0);
+  border-radius: 3px;
+}
+
+.chat-container::-webkit-scrollbar-thumb:hover {
+  background-color: var(--jp-border-color1);
+}
+
+.chat-bubble {
+  max-width: 70%;
+  padding: 8px 12px;
+  border-radius: 18px;
+  position: relative;
+  word-wrap: break-word;
+  font-family: var(--jp-ui-font-family);
+  font-size: var(--jp-ui-font-size1);
+  line-height: 1.4;
+}
+
+.chat-bubble-left {
+  align-self: flex-start;
+  background-color: var(--jp-layout-color2);
   color: var(--jp-ui-font-color1);
+  border-bottom-left-radius: 6px;
+  box-shadow: 0 1px 2px var(--jp-shadow-penumbra-color);
+}
+
+.chat-bubble-right {
+  align-self: flex-end;
+  background-color: var(--jp-brand-color1);
+  color: white;
+  border-bottom-right-radius: 6px;
+  box-shadow: 0 1px 2px var(--jp-shadow-penumbra-color);
+}
+
+.chat-message-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 0;
+}
+
+.chat-sender-label {
+  font-size: var(--jp-ui-font-size0);
+  font-weight: 600;
+  margin-bottom: 1px;
+  padding: 0 2px;
+}
+
+.chat-sender-label.user {
+  align-self: flex-end;
+  color: var(--jp-brand-color1);
+}
+
+.chat-sender-label.assistant {
+  align-self: flex-start;
+  color: var(--jp-ui-font-color2);
+}
+
+.chat-sender {
+  font-size: var(--jp-ui-font-size0);
+  font-weight: 600;
+  color: var(--jp-brand-color1);
+  margin-bottom: 4px;
+  opacity: 0.8;
+}
+
+.chat-message {
+  margin-bottom: 4px;
+}
+
+.chat-timestamp {
+  font-size: var(--jp-ui-font-size0);
+  opacity: 0.6;
+  text-align: right;
+  margin-top: 4px;
+}
+
+.chat-bubble-left .chat-timestamp {
+  text-align: left;
+  color: var(--jp-ui-font-color2);
+}
+
+.chat-bubble-right .chat-timestamp {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* Chat Bubble Animation */
+.chat-bubble {
+  opacity: 0;
+  transform: translateY(20px);
+  transition:
+    opacity 0.6s ease-out,
+    transform 0.6s ease-out;
+}
+
+.chat-bubble-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Assistant Message Styles */
+.assistant-message {
+  opacity: 0;
+  transform: translateY(20px);
+  transition:
+    opacity 0.6s ease-out,
+    transform 0.6s ease-out;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  max-width: 100%;
+  font-family: var(--jp-ui-font-family);
+  font-size: var(--jp-ui-font-size1);
+  line-height: 1.6;
+  color: var(--jp-ui-font-color1);
+}
+
+.assistant-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.assistant-text-line {
+  margin-bottom: 8px;
+  word-wrap: break-word;
+}
+
+.assistant-text-line.indent-1 {
+  margin-left: 16px;
+}
+
+.assistant-text-line.indent-2 {
+  margin-left: 32px;
+}
+
+.assistant-text-line.indent-3 {
+  margin-left: 48px;
+}
+
+.assistant-text-line.indent-4 {
+  margin-left: 64px;
+}
+
+.assistant-list-item {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 6px;
+  word-wrap: break-word;
+}
+
+.list-bullet {
+  color: var(--jp-brand-color1);
+  font-weight: bold;
+  margin-right: 8px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.list-number {
+  color: var(--jp-brand-color1);
+  font-weight: bold;
+  margin-right: 8px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  min-width: 20px;
+}
+
+.list-content {
+  flex: 1;
+}
+
+.list-content-header {
+  flex: 1;
+  font-weight: bold;
+}
+
+.assistant-code-line {
+  font-family: var(--jp-code-font-family);
+  font-size: var(--jp-code-font-size0);
+  background-color: var(--jp-layout-color2);
+  border: 1px solid var(--jp-border-color1);
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin: 4px 0;
+  overflow-x: auto;
+  white-space: pre;
+  color: var(--jp-content-font-color1);
+}
+
+.assistant-empty-line {
+  height: 8px;
+}
+
+.assistant-header-line {
+  margin-bottom: 12px;
+  word-wrap: break-word;
+  font-size: var(--jp-ui-font-size2);
+  color: var(--jp-ui-font-color0);
+}
+
+/* Stagger animation for multiple chat bubbles */
+.chat-container .chat-bubble:nth-child(1) {
+  transition-delay: 0.1s;
+}
+.chat-container .chat-bubble:nth-child(2) {
+  transition-delay: 0.2s;
+}
+.chat-container .chat-bubble:nth-child(3) {
+  transition-delay: 0.3s;
+}
+.chat-container .chat-bubble:nth-child(4) {
+  transition-delay: 0.4s;
+}
+.chat-container .chat-bubble:nth-child(5) {
+  transition-delay: 0.5s;
+}
+
+/* Remove bottom margin from last message to eliminate bottom padding */
+.chat-container .chat-message-wrapper:last-child {
+  margin-bottom: 0;
+}
+
+/* Chat Input Styles */
+.chat-input-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  width: 100%;
+  max-width: 100%;
+}
+
+.chat-input {
+  flex: 1;
+  padding: 8px 16px;
+  border: 1px solid var(--jp-border-color0);
+  border-radius: 18px;
+  font-family: var(--jp-ui-font-family);
+  font-size: var(--jp-ui-font-size1);
+  background-color: var(--jp-layout-color1);
+  color: var(--jp-ui-font-color1);
+  transition: all 0.2s ease;
+  outline: none;
+  min-height: 36px;
+  box-sizing: border-box;
+}
+
+.chat-input:focus {
+  border-color: var(--jp-brand-color1);
+  box-shadow: 0 0 0 3px rgba(var(--jp-brand-color1-rgb, 0, 123, 255), 0.1);
+  transform: translateY(-1px);
+}
+
+.chat-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.chat-input::placeholder {
+  color: var(--jp-ui-font-color2);
+  opacity: 0.7;
+}
+
+.chat-submit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background-color: var(--jp-brand-color1);
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.chat-submit-btn:hover:not(:disabled) {
+  background-color: var(--jp-brand-color0);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(var(--jp-brand-color1-rgb, 0, 123, 255), 0.3);
+}
+
+.chat-submit-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(var(--jp-brand-color1-rgb, 0, 123, 255), 0.3);
+}
+
+.chat-submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.chat-submit-btn .submit-icon {
+  width: 20px;
+  height: 20px;
+  transition: transform 0.2s ease;
+}
+
+.chat-submit-btn:hover:not(:disabled) .submit-icon {
+  transform: scale(1.1);
+}
+
+/* Loading State Styles */
+.chat-submit-btn.loading {
+  background-color: var(--jp-brand-color1);
+  pointer-events: none;
+}
+
+/* Enhanced loading animations for the entire input container */
+.chat-input-container.loading {
+  animation: containerPulse 2s ease-in-out infinite;
+  position: relative;
+}
+
+.chat-input-container.loading::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(var(--jp-brand-color1-rgb, 0, 123, 255), 0.1),
+    transparent
+  );
+  animation: lightSweep 2s ease-in-out infinite;
+  border-radius: 18px;
+}
+
+/* Loading state for the input field */
+.chat-input.loading {
+  border-color: var(--jp-brand-color1);
+  animation: inputPulse 2s ease-in-out infinite;
+  box-shadow: 0 0 0 3px rgba(var(--jp-brand-color1-rgb, 0, 123, 255), 0.1);
+}
+
+/* Loading state for placeholder text */
+.chat-input.loading::placeholder {
+  animation: textPulse 1.5s ease-in-out infinite;
+  font-style: italic;
+  color: var(--jp-brand-color1);
+}
+
+/* Container pulse animation */
+@keyframes containerPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.01);
+    opacity: 0.95;
+  }
+}
+
+/* Light sweep animation */
+@keyframes lightSweep {
+  0% {
+    left: -100%;
+  }
+  50% {
+    left: 100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+/* Input field pulse animation */
+@keyframes inputPulse {
+  0%,
+  100% {
+    border-color: var(--jp-brand-color1);
+    box-shadow: 0 0 0 3px rgba(var(--jp-brand-color1-rgb, 0, 123, 255), 0.1);
+  }
+  50% {
+    border-color: var(--jp-brand-color0);
+    box-shadow: 0 0 0 3px rgba(var(--jp-brand-color1-rgb, 0, 123, 255), 0.2);
+  }
+}
+
+/* Text pulse animation */
+@keyframes textPulse {
+  0%,
+  100% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+}
+
+.loading-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.spinner-ring {
+  width: 20px;
+  height: 20px;
+  border: 2px solid transparent;
+  border-top: 2px solid currentColor;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .chat-input-container {
+    gap: 6px;
+  }
+
+  .chat-input {
+    padding: 6px 12px;
+    min-height: 32px;
+  }
+
+  .chat-submit-btn {
+    width: 32px;
+    height: 32px;
+  }
 }

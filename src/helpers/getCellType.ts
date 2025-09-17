@@ -1,8 +1,10 @@
 import { Cell, CodeCell } from '@jupyterlab/cells';
+import { DEMO_PRINTS } from '..';
 
 const GRADER_PACKAGE_TOKEN = 'otter';
 const GRADER_METHOD_NAMES = ['check'];
 let graderVariableName = '';
+
 /**
  * Determines the type of a cell given
  *
@@ -35,13 +37,14 @@ const getCellType = (
           tokens[i - 1].type === 'AssignOp'
         ) {
           graderVariableName = tokens[i - 2].value;
-          //   console.log('GRADER VARIABLE NAME FOUND', graderVariableName);
+          if (DEMO_PRINTS)
+            console.log('GRADER VARIABLE NAME FOUND', graderVariableName);
         }
       }
     }
 
     if (graderVariableName === '') {
-      console.log('GRADER NOT INITIALIZED YET');
+      if (DEMO_PRINTS) console.log('GRADER NOT INITIALIZED YET');
       return 'grader_not_initialized';
     }
 
