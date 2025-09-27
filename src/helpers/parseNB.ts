@@ -43,7 +43,11 @@ const parseNB = (
   let activeIndex = notebook.activeCellIndex;
   const allCells: ParsedCell[] = notebook.cellsArray.map(
     (cell: Cell, index: number): ParsedCell => {
-      const type = getCellType(cell, true);
+      const type = getCellType(
+        cell,
+        true,
+        index > 0 ? notebook.cellsArray[index - 1] : undefined
+      );
       let cellObj: ParsedCell = {
         index,
         type,
@@ -54,7 +58,12 @@ const parseNB = (
         images: findImageSources(cell.node.innerHTML),
         links: findHyperlinks(cell.node.innerHTML)
       };
-      if (type === 'grader' || type === 'code' || type === 'error') {
+      if (
+        type === 'grader' ||
+        type === 'code' ||
+        type === 'error' ||
+        type === 'success'
+      ) {
         const codeCell = cell as CodeCell;
         if (codeCell.outputArea.layout.widgets?.length > 0) {
           cellObj.outputText =

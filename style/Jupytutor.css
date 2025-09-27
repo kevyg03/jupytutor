@@ -78,6 +78,7 @@
 /* Loading state for suggestions */
 .tailoredOptionsContainer.loading {
   animation: suggestionsPulse 2s ease-in-out infinite;
+  opacity: 0.5;
 }
 
 @keyframes suggestionsPulse {
@@ -397,6 +398,35 @@
   word-wrap: break-word;
   font-size: var(--jp-ui-font-size2);
   color: var(--jp-ui-font-color0);
+}
+
+/* Assistant Link Styles */
+.jupytutor .assistant-link {
+  color: #0066cc !important;
+  text-decoration: underline;
+  text-decoration-color: #0066cc;
+  transition: all 0.2s ease;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.jupytutor .assistant-link:hover {
+  color: #004499 !important;
+  text-decoration-color: #004499;
+  background-color: rgba(0, 102, 204, 0.1);
+  border-radius: 2px;
+  padding: 1px 2px;
+  margin: -1px -2px;
+}
+
+.jupytutor .assistant-link:visited {
+  color: #663399 !important;
+  text-decoration-color: #663399;
+}
+
+.jupytutor .assistant-link:active {
+  color: #004499 !important;
+  text-decoration-color: #004499;
 }
 
 /* Stagger animation for multiple chat bubbles */

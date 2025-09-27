@@ -11,6 +11,7 @@ export const STARTING_TEXTBOOK_CONTEXT: string =
  */
 export interface ContextRetrievalConfig {
   sourceLinks?: string[];
+  whitelistedURLs?: string[];
   blacklistedURLs?: string[];
   jupyterbookURL?: string;
   attemptJupyterbookLinkExpansion?: boolean;
@@ -34,9 +35,12 @@ class ContextRetrieval {
   private _loaded: boolean;
   private _sourceLinks: string[];
   private _blacklistedURLs: string[];
+  private _whitelistedURLs: string[];
 
+  // TODO: WHITELIST
   constructor({
     sourceLinks = [],
+    whitelistedURLs = [],
     blacklistedURLs = [
       'data8.org', // Includes references, policies, schedule, etc.
       'berkeley.edu', // Includes map, etc.
@@ -49,6 +53,7 @@ class ContextRetrieval {
     this._context = null;
     this._sourceLinks = sourceLinks;
     this._blacklistedURLs = blacklistedURLs;
+    this._whitelistedURLs = whitelistedURLs;
     this._loaded = false;
 
     if (!debug) {
@@ -71,6 +76,13 @@ class ContextRetrieval {
       this._blacklistedURLs.some(blacklistedURL =>
         url.includes(blacklistedURL)
       );
+    const isWhitelisted = (url: string) =>
+      this._whitelistedURLs.some(whitelistedURL =>
+        url.includes(whitelistedURL)
+      );
+    if (this._whitelistedURLs.length > 0) {
+      this._sourceLinks = this._sourceLinks.filter(url => isWhitelisted(url));
+    }
     if (this._blacklistedURLs.length > 0) {
       this._sourceLinks = this._sourceLinks.filter(url => !isBlacklisted(url));
     }
@@ -152,6 +164,7 @@ class ContextRetrieval {
 
     // Build the final result by inserting expanded links after each original JupyterBook link
     const result: string[] = [];
+    const seenUrls = new Set<string>();
     let jupyterBookIndex = 0;
 
     for (let i = 0; i < sourceLinks.length; i++) {
@@ -159,13 +172,21 @@ class ContextRetrieval {
 
       if (originalLink.includes(jupyterbookURL)) {
         // This is a JupyterBook link - add it and its expansions
-        result.push(originalLink);
+        const normalizedOriginalLink = this.normalizeUrl(originalLink);
+        if (!seenUrls.has(normalizedOriginalLink)) {
+          result.push(originalLink);
+          seenUrls.add(normalizedOriginalLink);
+        }
 
         // Add the expanded links for this JupyterBook URL
         const expandedLinksForThisUrl = allLinks[jupyterBookIndex] || [];
-        const uniqueExpandedLinks = expandedLinksForThisUrl.filter(
-          link => link !== originalLink && !result.includes(link)
-        );
+        const uniqueExpandedLinks = expandedLinksForThisUrl.filter(link => {
+          const normalizedLink = this.normalizeUrl(link);
+          return (
+            normalizedLink !== normalizedOriginalLink &&
+            !seenUrls.has(normalizedLink)
+          );
+        });
 
         // Sort the expanded links: main chapter first, then subsections in order
         uniqueExpandedLinks.sort((a, b) => {
@@ -195,15 +216,47 @@ class ContextRetrieval {
           return aPath.localeCompare(bPath);
         });
 
-        result.push(...uniqueExpandedLinks);
+        // Add unique expanded links and track them in seenUrls
+        for (const link of uniqueExpandedLinks) {
+          const normalizedLink = this.normalizeUrl(link);
+          if (!seenUrls.has(normalizedLink)) {
+            result.push(link);
+            seenUrls.add(normalizedLink);
+          }
+        }
         jupyterBookIndex++;
       } else {
-        // This is a non-JupyterBook link - add it as-is
-        result.push(originalLink);
+        // This is a non-JupyterBook link - add it as-is if not already seen
+        const normalizedLink = this.normalizeUrl(originalLink);
+        if (!seenUrls.has(normalizedLink)) {
+          result.push(originalLink);
+          seenUrls.add(normalizedLink);
+        }
       }
     }
 
     return result;
+  }
+
+  /**
+   * Normalize a URL by removing hash fragments, trailing slashes, and other variations
+   * @param url - the URL to normalize
+   * @returns normalized URL
+   */
+  private normalizeUrl(url: string): string {
+    try {
+      const urlObj = new URL(url);
+      // Remove hash fragment
+      urlObj.hash = '';
+      // Remove trailing slash from pathname (except for root)
+      if (urlObj.pathname.length > 1 && urlObj.pathname.endsWith('/')) {
+        urlObj.pathname = urlObj.pathname.slice(0, -1);
+      }
+      return urlObj.href;
+    } catch (error) {
+      // If URL parsing fails, return the original URL
+      return url;
+    }
   }
 
   /**
@@ -277,9 +330,9 @@ class ContextRetrieval {
 
         // Only include links from the same JupyterBook domain
         if (fullUrl.includes(jupyterbookURL)) {
-          // Remove hash fragments to avoid duplicates
-          const cleanUrl = fullUrl.split('#')[0];
-          const pathname = new URL(cleanUrl).pathname;
+          // Normalize the URL to remove hash fragments and other variations
+          const normalizedUrl = this.normalizeUrl(fullUrl);
+          const pathname = new URL(normalizedUrl).pathname;
 
           // Check if this is a chapter/section link
           const isChapterSectionLink = this.isChapterSectionLink(
@@ -289,7 +342,7 @@ class ContextRetrieval {
           );
 
           if (isChapterSectionLink) {
-            links.push(cleanUrl);
+            links.push(normalizedUrl);
           }
         }
       }

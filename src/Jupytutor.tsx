@@ -1,5 +1,5 @@
 // import { Widget } from '@lumino/widgets';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { ParsedCell } from './helpers/parseNB';
 
 import { ReactWidget } from '@jupyterlab/apputils';
@@ -9,6 +9,7 @@ import ContextRetrieval, {
   STARTING_TEXTBOOK_CONTEXT
 } from './helpers/contextRetrieval';
 import { DEMO_PRINTS } from '.';
+import config from './config';
 
 export interface JupytutorProps {
   autograderResponse: string | undefined;
@@ -17,6 +18,13 @@ export interface JupytutorProps {
   notebookContext: 'whole' | 'upToGrader' | 'fiveAround' | 'tenAround' | 'none';
   sendTextbookWithRequest: boolean;
   contextRetriever: ContextRetrieval | null;
+  cellType:
+    | 'code'
+    | 'free_response'
+    | 'grader'
+    | 'success'
+    | 'error'
+    | 'grader_not_initialized';
 }
 
 interface ChatHistoryItem {
@@ -26,13 +34,13 @@ interface ChatHistoryItem {
 }
 
 export const Jupytutor = (props: JupytutorProps): JSX.Element => {
-  const STARTING_MESSAGE = 'Generating initial analysis...';
+  const STARTING_MESSAGE = '';
   const [inputValue, setInputValue] = useState(STARTING_MESSAGE);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const hasGatheredInitialContext = useRef(false);
   const initialContextData = useRef<ChatHistoryItem[]>([]);
 
-  const { sendTextbookWithRequest, contextRetriever } = props;
+  const { sendTextbookWithRequest, contextRetriever, cellType } = props;
 
   const createChatContextFromCells = (
     cells: ParsedCell[]
@@ -70,7 +78,10 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
 
     const notebookContext: ChatHistoryItem[] = cells.map(cell => {
       const hasOutput = cell.outputText !== '' && cell.outputText != null;
-      if (hasOutput) {
+      if (
+        (hasOutput && props.cellType === 'code') ||
+        props.cellType === 'grader'
+      ) {
         return {
           role: 'system' as const,
           content: [
@@ -80,6 +91,22 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
                 cell.text +
                 '\nThe above code produced the following output:\n' +
                 cell.outputText,
+              type: 'input_text'
+            }
+          ],
+          noShow: true
+        };
+      } else if (props.cellType === 'free_response') {
+        if (DEMO_PRINTS)
+          console.log('Sending free response prompt with request!');
+        return {
+          role: 'system' as const,
+          content: [
+            {
+              text:
+                "The following is the student's response to the free response question directly above: [response start]" +
+                cell.text +
+                '\n[response over]. Provide concise feedback on the response with a focus on accuracy and understanding.',
               type: 'input_text'
             }
           ],
@@ -171,7 +198,6 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
 
   const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [showSuggestions, setShowSuggestions] = useState(false);
 
   // Auto-scroll to bottom when new messages are added
   useEffect(() => {
@@ -181,24 +207,81 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
     }
   }, [chatHistory]);
 
-  // Show suggestions after first assistant response
-  useEffect(() => {
-    const hasAssistantResponse = chatHistory.some(
-      item => item.role === 'assistant' && !item.noShow
-    );
-    if (hasAssistantResponse && !showSuggestions) {
-      setShowSuggestions(true);
-    }
-  }, [chatHistory, showSuggestions]);
-
   // Debug chat history changes
   useEffect(() => {
     if (DEMO_PRINTS) console.log('Chat history changed:', chatHistory);
   }, [chatHistory]);
 
+  /**
+   * Converts a base64 data URL to a File object
+   * @param {string} dataUrl - Base64 data URL (e.g., "data:image/png;base64,iVBORw0KGgo...")
+   * @param {string} filename - Name for the file
+   * @returns {File} File object
+   */
+  const dataUrlToFile = (
+    dataUrl: string,
+    filename: string = 'file'
+  ): File | null => {
+    try {
+      // Validate data URL format
+      if (!dataUrl.startsWith('data:')) {
+        // throw new Error('Invalid data URL: must start with "data:"');
+        if (DEMO_PRINTS)
+          console.warn('Invalid data URL: must start with "data:"', dataUrl);
+        return null;
+      }
+
+      const [header, base64Data] = dataUrl.split(',');
+      if (!base64Data) {
+        // throw new Error('Invalid data URL: missing base64 data');
+        if (DEMO_PRINTS)
+          console.warn('Invalid data URL: missing base64 data', dataUrl);
+        return null;
+      }
+
+      const mimeMatch = header.match(/data:([^;]+)/);
+      const mimeType = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+
+      // Validate MIME type for images
+      if (!mimeType.startsWith('image/')) {
+        if (DEMO_PRINTS)
+          console.warn(
+            `Unexpected MIME type: ${mimeType}, expected image/*`,
+            dataUrl
+          );
+        return null;
+      }
+
+      // Convert base64 to binary
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+
+      // Create File object
+      const file = new File([byteArray], filename, { type: mimeType });
+
+      if (DEMO_PRINTS) {
+        console.log(
+          `Created file: ${filename}, type: ${mimeType}, size: ${file.size} bytes`
+        );
+      }
+
+      return file;
+    } catch (error) {
+      console.error('Error converting data URL to File:', error);
+      console.error('Data URL preview:', dataUrl.substring(0, 100) + '...');
+      throw new Error(
+        `Invalid data URL format: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  };
+
   const queryAPI = async (forceSuggestion?: string) => {
     const noInput = inputValue === STARTING_MESSAGE && !forceSuggestion;
-    const firstQuery = chatHistory.length === 0 && noInput;
+    const firstQuery = chatHistory.length === 0; // DEPRECATED AFTER REMOVING AUTOMATIC FIRST QUERY
     if (noInput && !firstQuery) return;
 
     let newMessage = forceSuggestion || inputValue;
@@ -206,7 +289,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
 
     if (noInput) {
       newMessage =
-        "This is my first attempt at the question. It's possible an attempt wasn't made yet. Either way, the error is provided above and some non-revealing, concise, and pedagogical steps to work toward a solution would be helpful. Frameworking your finding into bullet lists is helpful for formatting.";
+        'This is the current attempt at the question. Focus on providing concise and accurate feedback that promotes understanding. When citing provided links, structure them with <a> tags.';
     } else {
       // Add user message immediately for responsiveness
       const userMessage: ChatHistoryItem = {
@@ -219,6 +302,10 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
 
     setIsLoading(true);
     const images = gatherImagesFromCells(props.allCells, 10, 5);
+
+    if (DEMO_PRINTS && images.length > 0) {
+      console.log('First image preview:', images[0].substring(0, 100) + '...');
+    }
 
     try {
       // Only gather context once on the first query
@@ -237,6 +324,34 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
       //   'Sending to server - updatedChatHistory:',
       //   chatHistoryToSend
       // );
+      const files = images.map((image, index) => {
+        // Extract filename from base64 data URL or use default
+        let filename = 'image.png';
+        try {
+          const [header] = image.split(',');
+          const mimeMatch = header.match(/data:([^;]+)/);
+          if (mimeMatch) {
+            const mimeType = mimeMatch[1];
+            const extension =
+              mimeType === 'image/png'
+                ? 'png'
+                : mimeType === 'image/jpeg'
+                  ? 'jpg'
+                  : mimeType === 'image/gif'
+                    ? 'gif'
+                    : 'png';
+            filename = `image_${index}.${extension}`;
+          }
+        } catch (error) {
+          console.warn('Could not extract filename from image:', error);
+          filename = `image_${index}.png`;
+        }
+
+        return {
+          name: filename,
+          file: dataUrlToFile(image, filename)
+        };
+      });
 
       const response: any = await makeAPIRequest('interaction', {
         method: 'POST',
@@ -245,27 +360,33 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
           images,
           newMessage,
           // Include the current chat history so the server has the full context
-          currentChatHistory: updatedChatHistory
+          currentChatHistory: updatedChatHistory,
+          cellType
         },
-        files: images.map(image => ({
-          name: image.split('/').pop(),
-          file: image
-        }))
+        files: files.filter(file => file.file instanceof File)
       });
 
       if (!response.success) {
         console.error('API request failed:', response.error);
         // Remove user message if request failed
-        if (!firstQuery) {
-          setChatHistory(prev => prev.slice(0, -1));
-        }
+        // if (!firstQuery) {
+        setChatHistory(prev => prev.slice(0, -1));
+        // }
       } else if (response.data?.newChatHistory) {
-        console.log(
-          'Server returned newChatHistory:',
-          response.data.newChatHistory
-        );
+        if (DEMO_PRINTS)
+          console.log(
+            'Server returned newChatHistory:',
+            response.data.newChatHistory
+          );
         // Replace the entire chat history with the server response
         let finalChatHistory = response.data.newChatHistory;
+        if (DEMO_PRINTS)
+          console.log(
+            'finalChatHistory',
+            finalChatHistory,
+            'firstQuery',
+            firstQuery
+          );
         if (firstQuery) {
           // 3 because of the reasoning item that's hidden
           finalChatHistory[finalChatHistory.length - 3].noShow = true;
@@ -277,7 +398,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
           hasGatheredInitialContext.current = true;
         }
       } else {
-        console.log('Server response data:', response.data);
+        if (DEMO_PRINTS) console.log('Server response data:', response.data);
         // If server doesn't return newChatHistory, append the assistant response
         // This is a fallback to ensure the conversation continues
         const assistantMessage: ChatHistoryItem = {
@@ -296,9 +417,9 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
     } catch (error) {
       console.error('API request failed:', error);
       // Remove user message if request failed
-      if (!firstQuery) {
-        setChatHistory(prev => prev.slice(0, -1));
-      }
+      // if (!firstQuery) {
+      setChatHistory(prev => prev.slice(0, -1));
+      // }
     }
 
     setIsLoading(false);
@@ -306,24 +427,63 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
   };
 
   useEffect(() => {
-    queryAPI();
+    if (
+      config.usage.automatic_first_query_on_error &&
+      cellType === 'grader' &&
+      chatHistory.length === 0
+    ) {
+      queryAPI();
+      setInputValue('Generating analysis...');
+    }
   }, []);
 
   const callSuggestion = (suggestion: string) => {
+    if (isLoading) return;
     setInputValue(suggestion);
     queryAPI(suggestion);
   };
 
   const callCurrentChatInput = () => {
+    if (isLoading) return;
     queryAPI(inputValue);
   };
 
-  const options: TailoredOptionProps[] = [
-    { id: 'error', text: 'Why this error?' },
-    { id: 'source', text: 'What should I review?' },
-    { id: 'progress', text: 'What progress have I made?' },
-    { id: 'course', text: 'What course concepts are relevant?' }
-  ];
+  const options: TailoredOptionProps[] = useMemo(() => {
+    let opts: TailoredOptionProps[];
+
+    if (cellType === 'grader')
+      opts = [
+        { id: 'error', text: 'Explain this error.' },
+        {
+          id: 'source',
+          text: 'Provide a concise list of important review materials.'
+        },
+        { id: 'progress', text: 'What progress have I made so far?' }
+      ];
+    else if (cellType === 'free_response')
+      opts = [
+        {
+          id: 'evaluate',
+          text: 'Evaluate my answer.'
+        }
+      ];
+    else if (cellType === 'success')
+      opts = [
+        {
+          id: 'improvements',
+          text: 'Are there any potential improvements I could still make?'
+        },
+        {
+          id: 'source_success',
+          text: 'Provide a concise list of important review materials.'
+        },
+        { id: 'progress', text: 'What progress have I made?' },
+        { id: 'course', text: 'What course concepts are relevant?' }
+      ];
+    else opts = [];
+
+    return opts;
+  }, [cellType]);
 
   return (
     // Note we can use the same CSS classes from Method 1
@@ -355,7 +515,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
           })}
       </div>
 
-      {showSuggestions && (
+      {options.length > 0 && (
         <TailoredOptions
           options={options}
           callSuggestion={callSuggestion}
@@ -456,6 +616,51 @@ const AssistantMessage = (props: AssistantMessageProps): JSX.Element => {
     return () => clearTimeout(timer);
   }, []);
 
+  // Parse text content to render links
+  const parseTextWithLinks = (text: string): JSX.Element[] => {
+    const linkRegex = /<a\s+href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gi;
+    const parts: JSX.Element[] = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = linkRegex.exec(text)) !== null) {
+      // Add text before the link
+      if (match.index > lastIndex) {
+        parts.push(
+          <span key={`text-${lastIndex}`}>
+            {text.slice(lastIndex, match.index)}
+          </span>
+        );
+      }
+
+      // Add the link
+      const href = match[1];
+      const linkText = match[2];
+      parts.push(
+        <a
+          key={`link-${match.index}`}
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="assistant-link"
+        >
+          {linkText}
+        </a>
+      );
+
+      lastIndex = match.index + match[0].length;
+    }
+
+    // Add remaining text after the last link
+    if (lastIndex < text.length) {
+      parts.push(
+        <span key={`text-${lastIndex}`}>{text.slice(lastIndex)}</span>
+      );
+    }
+
+    return parts.length > 0 ? parts : [<span key="text">{text}</span>];
+  };
+
   // Auto-format the message
   const formatMessage = (text: string): JSX.Element[] => {
     const lines = text.split('\n');
@@ -480,14 +685,16 @@ const AssistantMessage = (props: AssistantMessageProps): JSX.Element => {
               style={indentStyle}
             >
               <span className="list-bullet">•</span>
-              <span className="list-content-header">{content}</span>
+              <span className="list-content-header">
+                {parseTextWithLinks(content)}
+              </span>
             </div>
           );
         }
         return (
           <div key={index} className="assistant-list-item" style={indentStyle}>
             <span className="list-bullet">•</span>
-            <span className="list-content">{content}</span>
+            <span className="list-content">{parseTextWithLinks(content)}</span>
           </div>
         );
       }
@@ -503,7 +710,9 @@ const AssistantMessage = (props: AssistantMessageProps): JSX.Element => {
               style={indentStyle}
             >
               <span className="list-number">{match[1]}.</span>
-              <span className="list-content">{match[2]}</span>
+              <span className="list-content">
+                {parseTextWithLinks(match[2])}
+              </span>
             </div>
           );
         }
@@ -535,7 +744,7 @@ const AssistantMessage = (props: AssistantMessageProps): JSX.Element => {
             className="assistant-header-line"
             style={indentStyle}
           >
-            <strong>{trimmedLine}</strong>
+            <strong>{parseTextWithLinks(trimmedLine)}</strong>
           </div>
         );
       }
@@ -543,7 +752,7 @@ const AssistantMessage = (props: AssistantMessageProps): JSX.Element => {
       // Handle regular text with proper indentation
       return (
         <div key={index} className="assistant-text-line" style={indentStyle}>
-          {trimmedLine}
+          {parseTextWithLinks(trimmedLine)}
         </div>
       );
     });
@@ -618,7 +827,8 @@ class JupytutorWidget extends ReactWidget {
       activeIndex: -1,
       notebookContext: 'upToGrader',
       sendTextbookWithRequest: false,
-      contextRetriever: null
+      contextRetriever: null,
+      cellType: 'code'
     }
   ) {
     super();

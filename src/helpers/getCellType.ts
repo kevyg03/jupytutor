@@ -1,9 +1,13 @@
 import { Cell, CodeCell } from '@jupyterlab/cells';
 import { DEMO_PRINTS } from '..';
+import config from '../config';
 
 const GRADER_PACKAGE_TOKEN = 'otter';
 const GRADER_METHOD_NAMES = ['check'];
 let graderVariableName = '';
+
+const FREE_RESPONSE_REGEX = config.keywords.free_response_regex;
+const SUCCESS_REGEX = config.keywords.success_regex;
 
 /**
  * Determines the type of a cell given
@@ -11,12 +15,21 @@ let graderVariableName = '';
  * @param cell the Jupyter Cell in question
  * @param success whether or not the cell ran successfully without error
  *
- * @returns the cell type, with priority given to 'grader' > 'code' for sake of triggering the tutor.
+ * @returns the cell type, with priority given to 'free_response' > 'grader' > 'code' for sake of triggering the tutor.
  */
 const getCellType = (
   cell: Cell,
-  success: boolean
-): 'grader' | 'code' | 'error' | 'text' | 'grader_not_initialized' | null => {
+  success: boolean,
+  previousCell: Cell | undefined = undefined
+):
+  | 'grader'
+  | 'code'
+  | 'error'
+  | 'text'
+  | 'grader_not_initialized'
+  | 'free_response'
+  | 'success'
+  | null => {
   // Only add the UI element if the cell execution was successful.
   if (cell.model.type === 'code') {
     const codeCell = cell as CodeCell;
@@ -64,8 +77,54 @@ const getCellType = (
       }
     }
 
-    return isGraderCell ? 'grader' : 'code';
-  } else return 'text';
+    const cellOutput = codeCell.outputArea?.layout.widgets[0];
+    const cellOutputText = cellOutput
+      ? cellOutput.node.innerText.toLowerCase()
+      : '';
+    const containsSuccessKeyword = SUCCESS_REGEX.test(cellOutputText);
+
+    if (isGraderCell) {
+      if (containsSuccessKeyword) {
+        if (DEMO_PRINTS) console.log('SUCCESS CELL DETECTED');
+        return 'success';
+      } else {
+        return 'grader';
+      }
+    } else {
+      return 'code';
+    }
+  } else {
+    // Check if cell is unlocked (editable) and contains free response keywords
+    // const cellText = cell.node.innerText.toLowerCase();
+    let isUnlocked = true; // Assume unlocked by default
+
+    try {
+      const metadata = cell.model.metadata as any;
+      const locked = metadata?.get?.('locked');
+      const readonly = metadata?.get?.('readonly');
+      isUnlocked = !locked && !readonly;
+    } catch (e) {
+      // If metadata access fails, assume unlocked
+      isUnlocked = true;
+    }
+
+    if (!isUnlocked) {
+      return 'text';
+    }
+
+    let isFreeResponseCell = false;
+    if (previousCell) {
+      const previousCellText = previousCell.node.innerText.toLowerCase();
+      isFreeResponseCell = FREE_RESPONSE_REGEX.test(previousCellText);
+      console.log('previousCellText', previousCellText, isFreeResponseCell);
+    }
+
+    if (isUnlocked && isFreeResponseCell) {
+      if (DEMO_PRINTS) console.log('FREE RESPONSE CELL DETECTED');
+      return 'free_response';
+    }
+    return 'text';
+  }
 };
 
 export default getCellType;

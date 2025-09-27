@@ -11,9 +11,21 @@ import parseNB from './helpers/parseNB';
 import ContextRetrieval, {
   STARTING_TEXTBOOK_CONTEXT
 } from './helpers/contextRetrieval';
+import config from './config';
+
+// Destructure the configuration
+// const {
+//   usage: { show_on_success, run_automatically },
+//   context_gathering: {
+//     enabled: contextGatheringEnabled,
+//     whitelist,
+//     blacklist,
+//     jupyterbook: { url: jupyterbookUrl, link_expansion: linkExpansion }
+//   }
+// } = config;
 
 export const DEMO_PRINTS = true;
-const SEND_TEXTBOOK_WITH_REQUEST = true;
+const SEND_TEXTBOOK_WITH_REQUEST = config.context_gathering.enabled;
 
 /**
  * Initialization data for the jupytutor extension.
@@ -25,7 +37,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
   autoStart: true,
   requires: [INotebookTracker],
   activate: (app: JupyterFrontEnd, tracker: INotebookTracker) => {
-    console.log('JupyterLab extension jupytutor is activated!');
+    console.log(
+      'JupyterLab extension jupytutor is activated with config: (config not connected yet)',
+      config
+    );
     let contextRetriever: ContextRetrieval | null = null;
 
     // GATHER CONTEXT IMMEDIATELY (doesn't need to stay up to date, just happens once)
@@ -63,13 +78,11 @@ const plugin: JupyterFrontEndPlugin<void> = {
         // Create ContextRetrieval instance with the gathered links
         contextRetriever = new ContextRetrieval({
           sourceLinks: uniqueLinks,
-          blacklistedURLs: [
-            'data8.org', // Includes references, policies, schedule, etc.
-            'berkeley.edu', // Includes map, etc.
-            'gradescope.com'
-          ], // blacklisted URLs
-          jupyterbookURL: 'inferentialthinking.com', // jupyterbook URL
-          attemptJupyterbookLinkExpansion: true, // attempt JupyterBook link expansion
+          whitelistedURLs: config.context_gathering.whitelist, // whitelisted URLs
+          blacklistedURLs: config.context_gathering.blacklist, // blacklisted URLs
+          jupyterbookURL: config.context_gathering.jupyterbook.url, // jupyterbook URL
+          attemptJupyterbookLinkExpansion:
+            config.context_gathering.jupyterbook.link_expansion, // attempt JupyterBook link expansion
           debug: false // debug mode
         });
 
@@ -146,7 +159,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
         }
 
         // Only add the Jupytutor element if it was a grader cell.
-        if (cellType === 'grader') {
+        if (
+          cellType === 'grader' ||
+          (cellType === 'success' && config.usage.show_on_success)
+        ) {
           const codeCell = cell as CodeCell;
 
           // activeIndex is guaranteed to be the cell just run within parseNB by cross-referencing cell
@@ -162,13 +178,63 @@ const plugin: JupyterFrontEndPlugin<void> = {
               activeIndex,
               notebookContext: 'upToGrader',
               sendTextbookWithRequest: SEND_TEXTBOOK_WITH_REQUEST,
-              contextRetriever
+              contextRetriever,
+              cellType: cellType
             });
 
             (codeCell.outputArea.layout as any).addWidget(jupytutor);
           }
         } else if (cellType === 'code') {
           // CAN DEFINE OTHER BEHAVIORS! INCLUDING MAP TO STORE ALL THE RELEVANT CONTEXT
+        } else if (config.usage.show_on_free_response) {
+          // For markdown cells, create a proper ReactWidget mounting
+          const [allCells, activeIndex] = parseNB(notebook, undefined);
+
+          const cellType: string | null = allCells[activeIndex].type;
+
+          if (cellType === 'free_response') {
+            // Create the Jupytutor widget
+            const jupytutor = new JupytutorWidget({
+              autograderResponse: '', // No autograder response for free response cells
+              allCells,
+              activeIndex,
+              notebookContext: 'upToGrader',
+              sendTextbookWithRequest: SEND_TEXTBOOK_WITH_REQUEST,
+              contextRetriever,
+              cellType: cellType
+            });
+
+            // Check if there's already a JupyTutor widget in this cell and remove it
+            const existingContainer = cell.node.querySelector(
+              '.jp-jupytutor-markdown-container'
+            );
+            if (existingContainer) {
+              existingContainer.remove();
+            }
+
+            // Create a proper container div with React mounting point
+            const container = document.createElement('div');
+            container.className = 'jp-jupytutor-markdown-container';
+            container.style.cssText = `
+            margin-top: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 0;
+            background-color: #ffffff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          `;
+
+            // Mount the ReactWidget properly
+            container.appendChild(jupytutor.node);
+
+            // Add to the cell
+            cell.node.appendChild(container);
+
+            // Ensure React renders by calling update after DOM insertion
+            requestAnimationFrame(() => {
+              jupytutor.update();
+            });
+          }
         }
       }
     );
