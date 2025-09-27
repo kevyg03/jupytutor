@@ -322,6 +322,12 @@
   transform: translateY(0);
 }
 
+.assistant-streaming {
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+  transition: none !important;
+}
+
 .assistant-text-line {
   margin-bottom: 8px;
   word-wrap: break-word;

@@ -1,8 +1,12 @@
 export const config = {
+  api: {
+    baseURL: 'http://localhost:3000/'
+  },
   usage: {
     show_on_success: true, // For asking questions, not effective if context_gathering is disabled
     show_on_free_response: true, // For asking questions, not effective if context_gathering is disabled
-    automatic_first_query_on_error: true
+    automatic_first_query_on_error: true,
+    use_streaming: true // Stream in the text responses instead of sending the entire response at once
   },
   context_gathering: {
     enabled: true, // Otherwise, just sends the notebook context
@@ -22,7 +26,7 @@ export const config = {
     free_response_regex:
       /.*question\s+\d+(?:\.\d+)*\.\s+.*\(?\d+\s+points\)?.*/i,
     // This is tested on the output of the current code cell (autograder output).
-    success_regex: /.*tests passed.*/i
+    success_regex: /.* passed!.*/i
   },
   instructor_note: ''
 };

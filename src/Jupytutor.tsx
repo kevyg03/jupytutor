@@ -8,6 +8,7 @@ import '../style/index.css';
 import ContextRetrieval, {
   STARTING_TEXTBOOK_CONTEXT
 } from './helpers/contextRetrieval';
+import { formatMessage } from './helpers/messageFormatting';
 import { DEMO_PRINTS } from '.';
 import config from './config';
 
@@ -39,6 +40,8 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const hasGatheredInitialContext = useRef(false);
   const initialContextData = useRef<ChatHistoryItem[]>([]);
+
+  const [liveResult, setLiveResult] = useState<string | null>(null);
 
   const { sendTextbookWithRequest, contextRetriever, cellType } = props;
 
@@ -207,6 +210,14 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
     }
   }, [chatHistory]);
 
+  // Auto-scroll to bottom when streaming content updates
+  useEffect(() => {
+    if (chatContainerRef.current && liveResult) {
+      chatContainerRef.current.scrollTop =
+        chatContainerRef.current.scrollHeight;
+    }
+  }, [liveResult]);
+
   // Debug chat history changes
   useEffect(() => {
     if (DEMO_PRINTS) console.log('Chat history changed:', chatHistory);
@@ -279,17 +290,21 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
     }
   };
 
-  const queryAPI = async (forceSuggestion?: string) => {
+  const autoNewMessage =
+    'This is my current attempt at the question. Focus on providing concise and accurate feedback that promotes understanding.';
+  const queryAPI = async (
+    forceSuggestion?: string,
+    useStreaming: boolean = config.usage.use_streaming
+  ) => {
     const noInput = inputValue === STARTING_MESSAGE && !forceSuggestion;
-    const firstQuery = chatHistory.length === 0; // DEPRECATED AFTER REMOVING AUTOMATIC FIRST QUERY
+    const firstQuery = chatHistory.length === 0;
     if (noInput && !firstQuery) return;
 
     let newMessage = forceSuggestion || inputValue;
     let updatedChatHistory = [...chatHistory];
 
     if (noInput) {
-      newMessage =
-        'This is the current attempt at the question. Focus on providing concise and accurate feedback that promotes understanding. When citing provided links, structure them with <a> tags.';
+      newMessage = autoNewMessage;
     } else {
       // Add user message immediately for responsiveness
       const userMessage: ChatHistoryItem = {
@@ -353,66 +368,118 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
         };
       });
 
-      const response: any = await makeAPIRequest('interaction', {
-        method: 'POST',
-        data: {
-          chatHistory: chatHistoryToSend,
-          images,
-          newMessage,
-          // Include the current chat history so the server has the full context
-          currentChatHistory: updatedChatHistory,
-          cellType
-        },
-        files: files.filter(file => file.file instanceof File)
-      });
+      if (useStreaming) {
+        // Use streaming request
+        setLiveResult(''); // Clear previous live result
 
-      if (!response.success) {
-        console.error('API request failed:', response.error);
-        // Remove user message if request failed
-        // if (!firstQuery) {
-        setChatHistory(prev => prev.slice(0, -1));
-        // }
-      } else if (response.data?.newChatHistory) {
-        if (DEMO_PRINTS)
-          console.log(
-            'Server returned newChatHistory:',
-            response.data.newChatHistory
-          );
-        // Replace the entire chat history with the server response
-        let finalChatHistory = response.data.newChatHistory;
-        if (DEMO_PRINTS)
-          console.log(
-            'finalChatHistory',
-            finalChatHistory,
-            'firstQuery',
-            firstQuery
-          );
-        if (firstQuery) {
-          // 3 because of the reasoning item that's hidden
-          finalChatHistory[finalChatHistory.length - 3].noShow = true;
+        // Create FormData for streaming request
+        const formData = new FormData();
+        formData.append('chatHistory', JSON.stringify(chatHistoryToSend));
+        formData.append('images', JSON.stringify(images));
+        formData.append('newMessage', newMessage);
+        formData.append(
+          'currentChatHistory',
+          JSON.stringify(updatedChatHistory)
+        );
+        formData.append('cellType', cellType);
+
+        // Add files
+        files
+          .filter(file => file.file instanceof File)
+          .forEach(file => {
+            if (file.file) {
+              formData.append(file.name, file.file);
+            }
+          });
+
+        const response = await fetch(
+          `${config.api.baseURL}interaction/stream`,
+          {
+            method: 'POST',
+            body: formData,
+            mode: 'cors',
+            credentials: 'include',
+            cache: 'no-cache'
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
-        setChatHistory(finalChatHistory);
 
-        // Only mark initial context as gathered after successful first query
-        if (!hasGatheredInitialContext.current) {
-          hasGatheredInitialContext.current = true;
+        const reader = response.body?.getReader();
+        if (!reader) {
+          throw new Error('No response body reader available');
+        }
+
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let currentMessage = '';
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+            for (const line of lines) {
+              if (line.trim() === '') continue;
+
+              if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.slice(6));
+
+                  if (data.type === 'message_delta') {
+                    currentMessage += data.content;
+                    setLiveResult(currentMessage);
+                  } else if (data.type === 'final_response') {
+                    // Complete message received - add to chat history
+                    handleQueryResult(data.data, noInput, newMessage);
+                    setLiveResult(null); // Clear live result when message is complete
+                    break;
+                  }
+                } catch (parseError) {
+                  console.warn(
+                    'Failed to parse SSE data:',
+                    parseError,
+                    'Line:',
+                    line
+                  );
+                }
+              }
+            }
+          }
+        } finally {
+          reader.releaseLock();
         }
       } else {
-        if (DEMO_PRINTS) console.log('Server response data:', response.data);
-        // If server doesn't return newChatHistory, append the assistant response
-        // This is a fallback to ensure the conversation continues
-        const assistantMessage: ChatHistoryItem = {
-          role: 'assistant',
-          content:
-            response.data?.response ||
-            'I apologize, but I encountered an issue processing your request.'
-        };
-        // Add both user message and assistant response
-        const userMessage: ChatHistoryItem = {
-          role: 'user',
-          content: newMessage
-        };
-        setChatHistory(prev => [...prev, userMessage, assistantMessage]);
+        // Use regular request
+        const response: any = await makeAPIRequest('interaction', {
+          method: 'POST',
+          data: {
+            chatHistory: chatHistoryToSend,
+            images,
+            newMessage,
+            // Include the current chat history so the server has the full context
+            currentChatHistory: updatedChatHistory,
+            cellType
+          },
+          files: files.filter(file => file.file instanceof File)
+        });
+
+        if (!response.success) {
+          console.error('API request failed:', response.error);
+          // Remove user message if request failed
+          if (!(firstQuery && config.usage.automatic_first_query_on_error)) {
+            setChatHistory(prev => prev.slice(0, -1));
+          }
+        } else {
+          handleQueryResult(response.data, noInput, newMessage);
+        }
       }
     } catch (error) {
       console.error('API request failed:', error);
@@ -424,6 +491,81 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
 
     setIsLoading(false);
     setInputValue('');
+  };
+
+  const handleQueryResult = (
+    data: any,
+    firstQuery: boolean,
+    newMessage: string
+  ) => {
+    if (data?.newChatHistory) {
+      if (DEMO_PRINTS)
+        console.log('Server returned newChatHistory:', data.newChatHistory);
+      // Replace the entire chat history with the server response
+      let finalChatHistory = data.newChatHistory;
+      if (DEMO_PRINTS)
+        console.log(
+          'finalChatHistory',
+          finalChatHistory,
+          'firstQuery',
+          firstQuery
+        );
+      if (firstQuery) {
+        // Hide the system reasoning item if present (defensive guard)
+        const idxToHide = finalChatHistory.length - 3;
+        if (
+          idxToHide >= 0 &&
+          idxToHide < finalChatHistory.length &&
+          finalChatHistory[idxToHide]
+        ) {
+          finalChatHistory[idxToHide].noShow = true;
+        }
+
+        // Additionally hide the auto user message (default newMessage) if the backend returns it
+        finalChatHistory = finalChatHistory.map((item: any) => {
+          if (item?.role === 'user') {
+            let text: string | undefined;
+            if (typeof item.content === 'string') {
+              text = item.content;
+            } else if (
+              Array.isArray(item.content) &&
+              item.content.length > 0 &&
+              item.content[0] &&
+              typeof item.content[0].text === 'string'
+            ) {
+              text = item.content[0].text;
+            }
+            if (text === newMessage) {
+              return { ...item, noShow: true };
+            }
+          }
+          return item;
+        });
+      }
+      setChatHistory(finalChatHistory);
+
+      // Only mark initial context as gathered after successful first query
+      if (!hasGatheredInitialContext.current) {
+        hasGatheredInitialContext.current = true;
+      }
+    } else {
+      if (DEMO_PRINTS)
+        console.log('Chat history not send, appending as fallback', data);
+      // If server doesn't return newChatHistory, append the assistant response
+      // This is a fallback to ensure the conversation continues
+      const assistantMessage: ChatHistoryItem = {
+        role: 'assistant',
+        content:
+          data?.response ||
+          'I apologize, but I encountered an issue processing your request.'
+      };
+      // Add both user message and assistant response
+      const userMessage: ChatHistoryItem = {
+        role: 'user',
+        content: newMessage
+      };
+      setChatHistory(prev => [...prev, userMessage, assistantMessage]);
+    }
   };
 
   useEffect(() => {
@@ -469,16 +611,15 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
       ];
     else if (cellType === 'success')
       opts = [
-        {
-          id: 'improvements',
-          text: 'Are there any potential improvements I could still make?'
-        },
+        { id: 'clarify', text: "I still don't feel confident in my answer." },
         {
           id: 'source_success',
-          text: 'Provide a concise list of important review materials.'
+          text: 'Provide me three important review materials.'
         },
-        { id: 'progress', text: 'What progress have I made?' },
-        { id: 'course', text: 'What course concepts are relevant?' }
+        {
+          id: 'improvements',
+          text: 'Can I make further improvements?'
+        }
       ];
     else opts = [];
 
@@ -508,11 +649,33 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
                 {isUser ? (
                   <ChatBubble message={message} position="right" />
                 ) : (
-                  <AssistantMessage message={message} />
+                  <AssistantMessage
+                    message={message}
+                    streaming={
+                      !config.usage.use_streaming ? 'none' : 'streamed'
+                    }
+                  />
                 )}
               </div>
             );
           })}
+
+        {/* Live streaming result */}
+        {liveResult && (
+          <div className="chat-message-wrapper">
+            <div className="chat-sender-label assistant">JupyTutor</div>
+            <div className="streaming-message">
+              <AssistantMessage message={liveResult} streaming="streaming" />
+              <div className="streaming-indicator">
+                <div className="typing-dots">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {options.length > 0 && (
@@ -603,164 +766,24 @@ const ChatBubble = (props: ChatBubbleProps): JSX.Element => {
 
 interface AssistantMessageProps {
   message: string;
+  streaming: 'none' | 'streamed' | 'streaming';
 }
 
 const AssistantMessage = (props: AssistantMessageProps): JSX.Element => {
-  const { message } = props;
-  const [isVisible, setIsVisible] = useState(false);
+  const { message, streaming } = props;
+  const [isVisible, setIsVisible] = useState(streaming !== 'none');
 
   useEffect(() => {
+    if (streaming !== 'none') return;
     const timer = setTimeout(() => {
       setIsVisible(true);
     }, 100);
     return () => clearTimeout(timer);
   }, []);
 
-  // Parse text content to render links
-  const parseTextWithLinks = (text: string): JSX.Element[] => {
-    const linkRegex = /<a\s+href=["']([^"']+)["'][^>]*>(.*?)<\/a>/gi;
-    const parts: JSX.Element[] = [];
-    let lastIndex = 0;
-    let match;
-
-    while ((match = linkRegex.exec(text)) !== null) {
-      // Add text before the link
-      if (match.index > lastIndex) {
-        parts.push(
-          <span key={`text-${lastIndex}`}>
-            {text.slice(lastIndex, match.index)}
-          </span>
-        );
-      }
-
-      // Add the link
-      const href = match[1];
-      const linkText = match[2];
-      parts.push(
-        <a
-          key={`link-${match.index}`}
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="assistant-link"
-        >
-          {linkText}
-        </a>
-      );
-
-      lastIndex = match.index + match[0].length;
-    }
-
-    // Add remaining text after the last link
-    if (lastIndex < text.length) {
-      parts.push(
-        <span key={`text-${lastIndex}`}>{text.slice(lastIndex)}</span>
-      );
-    }
-
-    return parts.length > 0 ? parts : [<span key="text">{text}</span>];
-  };
-
-  // Auto-format the message
-  const formatMessage = (text: string): JSX.Element[] => {
-    const lines = text.split('\n');
-    return lines.map((line, index) => {
-      const trimmedLine = line.trim();
-
-      // Calculate indentation level based on leading whitespace
-      const indentLevel = line.search(/\S/);
-      const indentStyle =
-        indentLevel > 0 ? { marginLeft: `${indentLevel * 0.5}em` } : {};
-
-      // Handle hyphen lists
-      if (trimmedLine.startsWith('- ')) {
-        const content = trimmedLine.substring(2);
-
-        // Check if the content starts with a colon sentence
-        if (content.endsWith(':') && content.split(' ').length <= 15) {
-          return (
-            <div
-              key={index}
-              className="assistant-list-item"
-              style={indentStyle}
-            >
-              <span className="list-bullet">•</span>
-              <span className="list-content-header">
-                {parseTextWithLinks(content)}
-              </span>
-            </div>
-          );
-        }
-        return (
-          <div key={index} className="assistant-list-item" style={indentStyle}>
-            <span className="list-bullet">•</span>
-            <span className="list-content">{parseTextWithLinks(content)}</span>
-          </div>
-        );
-      }
-
-      // Handle numbered lists
-      if (/^\d+\.\s/.test(trimmedLine)) {
-        const match = trimmedLine.match(/^(\d+)\.\s(.+)/);
-        if (match) {
-          return (
-            <div
-              key={index}
-              className="assistant-list-item"
-              style={indentStyle}
-            >
-              <span className="list-number">{match[1]}.</span>
-              <span className="list-content">
-                {parseTextWithLinks(match[2])}
-              </span>
-            </div>
-          );
-        }
-      }
-
-      // Handle code blocks (lines starting with 4+ spaces or tabs)
-      if (/^(\s{4,}|\t)/.test(line)) {
-        return (
-          <div key={index} className="assistant-code-line" style={indentStyle}>
-            {line}
-          </div>
-        );
-      }
-
-      // Handle empty lines
-      if (trimmedLine === '') {
-        return <div key={index} className="assistant-empty-line" />;
-      }
-
-      // Handle header formatting - single line sentences ending with colon
-      if (
-        trimmedLine.endsWith(':') &&
-        !trimmedLine.includes('\n') &&
-        trimmedLine.split(' ').length <= 15
-      ) {
-        return (
-          <div
-            key={index}
-            className="assistant-header-line"
-            style={indentStyle}
-          >
-            <strong>{parseTextWithLinks(trimmedLine)}</strong>
-          </div>
-        );
-      }
-
-      // Handle regular text with proper indentation
-      return (
-        <div key={index} className="assistant-text-line" style={indentStyle}>
-          {parseTextWithLinks(trimmedLine)}
-        </div>
-      );
-    });
-  };
-
   return (
     <div
-      className={`assistant-message ${isVisible ? 'assistant-visible' : ''}`}
+      className={`assistant-message ${isVisible ? 'assistant-visible' : ''} ${streaming === 'streaming' ? 'assistant-streaming' : ''}`}
     >
       {formatMessage(message)}
     </div>

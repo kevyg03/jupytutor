@@ -20,9 +20,10 @@
  */
 
 import { DEMO_PRINTS } from '..';
+import config from '../config';
 
 // Configurable API base URL - can be overridden per request
-const DEFAULT_API_URL = 'http://localhost:3000/';
+const DEFAULT_API_URL = config.api.baseURL;
 
 /**
  * Creates a FormData object from the provided data and files

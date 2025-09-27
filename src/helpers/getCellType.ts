@@ -116,7 +116,6 @@ const getCellType = (
     if (previousCell) {
       const previousCellText = previousCell.node.innerText.toLowerCase();
       isFreeResponseCell = FREE_RESPONSE_REGEX.test(previousCellText);
-      console.log('previousCellText', previousCellText, isFreeResponseCell);
     }
 
     if (isUnlocked && isFreeResponseCell) {
