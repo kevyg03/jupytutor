@@ -28,7 +28,7 @@ export const config = {
     // This is tested on the output of the current code cell (autograder output).
     success_regex: /.* passed!.*/i
   },
-  instructor_note: ''
+  instructor_note: '' // NOT IMPLEMENTED YET
 };
 
 export default config;

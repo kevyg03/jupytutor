@@ -26,6 +26,7 @@ export interface JupytutorProps {
     | 'success'
     | 'error'
     | 'grader_not_initialized';
+  userId: string | null;
 }
 
 interface ChatHistoryItem {
@@ -43,7 +44,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
 
   const [liveResult, setLiveResult] = useState<string | null>(null);
 
-  const { sendTextbookWithRequest, contextRetriever, cellType } = props;
+  const { sendTextbookWithRequest, contextRetriever, cellType, userId } = props;
 
   const createChatContextFromCells = (
     cells: ParsedCell[]
@@ -81,10 +82,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
 
     const notebookContext: ChatHistoryItem[] = cells.map(cell => {
       const hasOutput = cell.outputText !== '' && cell.outputText != null;
-      if (
-        (hasOutput && props.cellType === 'code') ||
-        props.cellType === 'grader'
-      ) {
+      if ((hasOutput && cell.type === 'code') || cell.type === 'grader') {
         return {
           role: 'system' as const,
           content: [
@@ -99,7 +97,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
           ],
           noShow: true
         };
-      } else if (props.cellType === 'free_response') {
+      } else if (cell.type === 'free_response') {
         if (DEMO_PRINTS)
           console.log('Sending free response prompt with request!');
         return {
@@ -178,7 +176,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
         contextCells = filteredCells;
         break;
       case 'upToGrader':
-        contextCells = filteredCells.slice(0, Math.max(0, newActiveIndex));
+        contextCells = filteredCells.slice(0, Math.max(0, newActiveIndex + 1));
         break;
       case 'fiveAround':
         contextCells = filteredCells.slice(
@@ -382,6 +380,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
           JSON.stringify(updatedChatHistory)
         );
         formData.append('cellType', cellType);
+        formData.append('userId', userId || '');
 
         // Add files
         files
@@ -466,7 +465,8 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
             newMessage,
             // Include the current chat history so the server has the full context
             currentChatHistory: updatedChatHistory,
-            cellType
+            cellType,
+            userId: userId || ''
           },
           files: files.filter(file => file.file instanceof File)
         });
@@ -851,7 +851,8 @@ class JupytutorWidget extends ReactWidget {
       notebookContext: 'upToGrader',
       sendTextbookWithRequest: false,
       contextRetriever: null,
-      cellType: 'code'
+      cellType: 'code',
+      userId: null
     }
   ) {
     super();

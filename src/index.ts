@@ -28,6 +28,17 @@ export const DEMO_PRINTS = true;
 const SEND_TEXTBOOK_WITH_REQUEST = config.context_gathering.enabled;
 
 /**
+ * Helper function to extract the user identifier from DataHub-style URLs
+ * @returns The username/identifier from the URL path, or null if not found
+ */
+const getUserIdentifier = (): string | null => {
+  const pathname = window.location.pathname;
+  // Match DataHub-style URLs: /user/<username>/...
+  const match = pathname.match(/\/user\/([^\/]+)/);
+  return match ? match[1] : null;
+};
+
+/**
  * Initialization data for the jupytutor extension.
  */
 const plugin: JupyterFrontEndPlugin<void> = {
@@ -41,6 +52,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
       'JupyterLab extension jupytutor is activated with config: (config not connected yet)',
       config
     );
+
+    // Get the DataHub user identifier
+    const userId = getUserIdentifier();
+    if (DEMO_PRINTS) {
+      console.log('Current URL:', window.location.href);
+      console.log('DataHub User ID:', userId);
+    }
+
     let contextRetriever: ContextRetrieval | null = null;
 
     // GATHER CONTEXT IMMEDIATELY (doesn't need to stay up to date, just happens once)
@@ -179,7 +198,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
               notebookContext: 'upToGrader',
               sendTextbookWithRequest: SEND_TEXTBOOK_WITH_REQUEST,
               contextRetriever,
-              cellType: cellType
+              cellType: cellType,
+              userId: userId
             });
 
             (codeCell.outputArea.layout as any).addWidget(jupytutor);
@@ -201,7 +221,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
               notebookContext: 'upToGrader',
               sendTextbookWithRequest: SEND_TEXTBOOK_WITH_REQUEST,
               contextRetriever,
-              cellType: cellType
+              cellType: cellType,
+              userId: userId
             });
 
             // Check if there's already a JupyTutor widget in this cell and remove it
