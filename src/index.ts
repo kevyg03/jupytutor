@@ -12,6 +12,7 @@ import ContextRetrieval, {
   STARTING_TEXTBOOK_CONTEXT
 } from './helpers/contextRetrieval';
 import config from './config';
+import { ServerConnection } from '@jupyterlab/services';
 
 // Destructure the configuration
 // const {
@@ -25,7 +26,6 @@ import config from './config';
 // } = config;
 
 export const DEMO_PRINTS = true;
-const SEND_TEXTBOOK_WITH_REQUEST = config.context_gathering.enabled;
 
 /**
  * Helper function to extract the user identifier from DataHub-style URLs
@@ -47,11 +47,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
     'A Jupyter extension for providing students LLM feedback based on autograder results and supplied course context.',
   autoStart: true,
   requires: [INotebookTracker],
-  activate: (app: JupyterFrontEnd, tracker: INotebookTracker) => {
-    console.log(
-      'JupyterLab extension jupytutor is activated with config: (config not connected yet)',
-      config
-    );
+  activate: async (app: JupyterFrontEnd, tracker: INotebookTracker) => {
+    // Try to load user config from ~/.config/jupytutor/config.json
+    let finalConfig = await loadConfiguration();
+    if (DEMO_PRINTS) {
+      console.log('Loaded configuration:', finalConfig);
+    }
+
+    const SEND_TEXTBOOK_WITH_REQUEST = finalConfig.context_gathering.enabled;
 
     // Get the DataHub user identifier
     const userId = getUserIdentifier();
@@ -97,11 +100,11 @@ const plugin: JupyterFrontEndPlugin<void> = {
         // Create ContextRetrieval instance with the gathered links
         contextRetriever = new ContextRetrieval({
           sourceLinks: uniqueLinks,
-          whitelistedURLs: config.context_gathering.whitelist, // whitelisted URLs
-          blacklistedURLs: config.context_gathering.blacklist, // blacklisted URLs
-          jupyterbookURL: config.context_gathering.jupyterbook.url, // jupyterbook URL
+          whitelistedURLs: finalConfig.context_gathering.whitelist, // whitelisted URLs
+          blacklistedURLs: finalConfig.context_gathering.blacklist, // blacklisted URLs
+          jupyterbookURL: finalConfig.context_gathering.jupyterbook.url, // jupyterbook URL
           attemptJupyterbookLinkExpansion:
-            config.context_gathering.jupyterbook.link_expansion, // attempt JupyterBook link expansion
+            finalConfig.context_gathering.jupyterbook.link_expansion, // attempt JupyterBook link expansion
           debug: false // debug mode
         });
 
@@ -180,7 +183,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         // Only add the Jupytutor element if it was a grader cell.
         if (
           cellType === 'grader' ||
-          (cellType === 'success' && config.usage.show_on_success)
+          (cellType === 'success' && finalConfig.usage.show_on_success)
         ) {
           const codeCell = cell as CodeCell;
 
@@ -206,7 +209,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
           }
         } else if (cellType === 'code') {
           // CAN DEFINE OTHER BEHAVIORS! INCLUDING MAP TO STORE ALL THE RELEVANT CONTEXT
-        } else if (config.usage.show_on_free_response) {
+        } else if (finalConfig.usage.show_on_free_response) {
           // For markdown cells, create a proper ReactWidget mounting
           const [allCells, activeIndex] = parseNB(notebook, undefined);
 
@@ -260,6 +263,79 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
     );
   }
+};
+
+const loadConfiguration = async () => {
+  let finalConfig = { ...config };
+  try {
+    const settings = ServerConnection.makeSettings();
+    const response = await ServerConnection.makeRequest(
+      `${settings.baseUrl}jupytutor/config`,
+      { method: 'GET' },
+      settings
+    );
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data.status === 'success' && data.config) {
+        if (JSONVerify(finalConfig, data.config)) {
+          finalConfig = recursiveJSONModify(finalConfig, data.config);
+        } else {
+          console.error(
+            'ERROR: User config does not match the default config. Changes not reflected. Edit ~/.config/jupytutor/config.json to fix this.'
+          );
+          return finalConfig;
+        }
+      }
+    }
+  } catch (error) {
+    // Config file doesn't exist or failed to load - use default config
+    if (DEMO_PRINTS) {
+      console.log(
+        'No user config found at ~/.config/jupytutor/config.json, using default config'
+      );
+    }
+  }
+  return finalConfig;
+};
+
+/**
+ * Takes two JSON objects, and modifies the first 1 throughout its entire structure with values
+ * found in the second in the exact same structure location.
+ *
+ * DOES NOT add any new keys to the first object, or delete any keys from the first object.
+ * IT ONLY MODIFIES THE VALUES OF THE FIRST OBJECT. Based on the structure of the second object.
+ * @param obj1 - The first JSON object to modify
+ * @param obj2 - The second JSON object to use as the source of truth
+ * @returns The copy of the first object with the values modified
+ */
+const recursiveJSONModify = (obj1: any, obj2: any): any => {
+  const newObj = { ...obj1 };
+  return Object.keys(obj2).reduce((acc, key) => {
+    if (obj2[key] && typeof obj2[key] === 'object') {
+      acc[key] = recursiveJSONModify(acc[key], obj2[key]);
+    } else {
+      if (key in obj1) acc[key] = obj2[key];
+    }
+    return acc;
+  }, newObj);
+};
+
+/**
+ * Returns TRUE if obj2 contains a SUBSET of all the keys in the same structure location as obj1.
+ * If obj2 contains a key that is not in obj1 at the same point of the structure, returns FALSE.
+ *
+ * @param obj1
+ * @param obj2
+ */
+const JSONVerify = (obj1: any, obj2: any): boolean => {
+  return Object.keys(obj2).every(key => {
+    if (obj2[key] && typeof obj2[key] === 'object') {
+      return JSONVerify(obj1[key], obj2[key]);
+    } else {
+      return key in obj1;
+    }
+  });
 };
 
 export default plugin;

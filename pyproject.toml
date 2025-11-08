@@ -1,5 +1,10 @@
 [build-system]
-requires = ["hatchling>=1.5.0", "jupyterlab>=4.0.0,<5", "hatch-nodejs-version>=0.3.2"]
+requires = [
+    "hatchling>=1.5.0",
+    "jupyterlab>=4.0.0,<5",
+    "hatch-nodejs-version>=0.3.2",
+    "hatch-jupyter-builder>=0.5"
+]
 build-backend = "hatchling.build"
 
 [project]
@@ -23,6 +28,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
+    "jupyter_server>=2.0.0,<3"
 ]
 dynamic = ["version", "description", "authors", "urls", "keywords"]
 
@@ -36,9 +42,13 @@ fields = ["description", "authors", "urls", "keywords"]
 artifacts = ["jupytutor/labextension"]
 exclude = [".github", "binder"]
 
+[tool.hatch.build.targets.wheel]
+artifacts = ["jupytutor/labextension"]
+
 [tool.hatch.build.targets.wheel.shared-data]
 "jupytutor/labextension" = "share/jupyter/labextensions/jupytutor"
 "install.json" = "share/jupyter/labextensions/jupytutor/install.json"
+"jupyter-server-config/jupytutor.json" = "etc/jupyter/jupyter_server_config.d/jupytutor.json"
 
 [tool.hatch.build.hooks.version]
 path = "jupytutor/_version.py"
@@ -51,6 +61,7 @@ ensured-targets = [
     "jupytutor/labextension/package.json",
 ]
 skip-if-exists = ["jupytutor/labextension/static/style.js"]
+install-pre-commit-hook = false
 
 [tool.hatch.build.hooks.jupyter-builder.build-kwargs]
 build_cmd = "build:prod"

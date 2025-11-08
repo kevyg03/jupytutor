@@ -1,0 +1,32 @@
+include LICENSE
+include README.md
+include pyproject.toml
+include install.json
+include babel.config.js
+include jest.config.js
+include tsconfig.json
+include tsconfig.test.json
+include webpack.config.js
+include package.json
+include yarn.lock
+
+graft jupytutor/labextension
+graft jupytutor
+graft jupyter-server-config
+graft src
+graft style
+
+# Patterns to exclude from any directory
+global-exclude *~
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude .git
+global-exclude .ipynb_checkpoints
+
+# Exclude specific directories
+prune .github
+prune binder
+prune node_modules
+prune lib
+prune ui-tests
+

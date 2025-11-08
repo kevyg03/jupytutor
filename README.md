@@ -8,6 +8,30 @@ A Jupyter extension for providing students LLM feedback based on autograder resu
 ## Requirements
 
 - JupyterLab >= 4.0.0
+- Python >= 3.9
+
+## Installation
+
+```bash
+pip install jupytutor
+```
+
+## Configuration
+
+jupytutor supports custom configuration through a JSON file in your home directory. See [CONFIG_SETUP.md](CONFIG_SETUP.md) for detailed setup instructions.
+
+### Quick Setup
+
+1. Create the config directory:
+
+   ```bash
+   mkdir -p ~/.config/jupytutor
+   ```
+
+2. Edit the config file with your settings (reference the jupytutor repository, src/config.ts)
+3. Restart JupyterLab
+
+For more details, see the [Configuration Setup Guide](CONFIG_SETUP.md).
 
 ## Testing Locally
 
@@ -24,8 +48,6 @@ jupyter lab
 ```
 
 Right click and hit "Inspect Element" and navigate to "Console" to confirm everything is activated.
-
-src/config.ts currently controls the settings. This may have to chance based on hosting needs.
 
 ## Contributing
 

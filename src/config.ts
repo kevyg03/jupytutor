@@ -1,3 +1,10 @@
+/**
+ * THIS IS THE DEFAULT CONFIGURATION FOR THE EXTENSION.
+ *
+ * It is overridden by the config file in ~/.config/jupytutor/config.json
+ *
+ * Structure ~/.config/jupytutor/config.json the same as the exported config object.
+ */
 export const config = {
   api: {
     baseURL: 'http://localhost:3000/'

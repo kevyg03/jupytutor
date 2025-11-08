@@ -14,3 +14,25 @@ def _jupyter_labextension_paths():
         "src": "labextension",
         "dest": "jupytutor"
     }]
+
+
+def _jupyter_server_extension_points():
+    """
+    Returns a list of dictionaries with metadata describing
+    where to find the server extension
+    """
+    return [{
+        "module": "jupytutor"
+    }]
+
+
+def _load_jupyter_server_extension(server_app):
+    """
+    Load the jupytutor server extension
+    """
+    from .handlers import setup_handlers
+    
+    web_app = server_app.web_app
+    setup_handlers(web_app)
+    
+    server_app.log.info("jupytutor server extension loaded")
