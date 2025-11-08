@@ -18,7 +18,7 @@ pip install jupytutor
 
 ## Configuration
 
-jupytutor supports custom configuration through a JSON file in your home directory. See [CONFIG_SETUP.md](CONFIG_SETUP.md) for detailed setup instructions.
+jupytutor supports custom configuration through a JSON file in your home directory.
 
 ### Quick Setup
 
@@ -28,10 +28,17 @@ jupytutor supports custom configuration through a JSON file in your home directo
    mkdir -p ~/.config/jupytutor
    ```
 
-2. Edit the config file with your settings (reference the jupytutor repository, src/config.ts)
-3. Restart JupyterLab
+2. Create the config file at
 
-For more details, see the [Configuration Setup Guide](CONFIG_SETUP.md).
+   ```
+   ~/.config/jupytutor/config.json
+   ```
+
+3. Edit the config file with your settings (reference the jupytutor repository (https://github.com/kevyg03/jupytutor), src/config.ts)
+
+4. Restart JupyterLab
+
+The config.json can only contain keys that exist in src/config.ts. Keys that aren't provided will default to the values set by config.ts.
 
 ## Testing Locally
 
