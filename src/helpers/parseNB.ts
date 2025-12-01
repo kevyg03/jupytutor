@@ -33,14 +33,30 @@ export interface ParsedCell {
  *
  * @param cell the Jupyter Cell in question
  * @param success whether or not the cell ran successfully without error
+ * @param activationFlag if provided, checks if ANY cell has this flag in its tags
  *
- * @returns allCells, activeIndex
+ * @returns allCells, activeIndex, allowed
  */
 const parseNB = (
   notebook: any,
-  cell: CodeCell | undefined = undefined
-): [ParsedCell[], number] => {
+  cell: CodeCell | undefined = undefined,
+  activationFlag: string = ''
+): [ParsedCell[], number, boolean] => {
   let activeIndex = notebook.activeCellIndex;
+
+  // Check for activation flag in any cell's tags if provided
+  let allowed = true;
+  if (activationFlag && activationFlag !== '') {
+    allowed = false;
+    for (const cell of notebook.cellsArray) {
+      const tags = cell.model.getMetadata('tags');
+      if (tags && Array.isArray(tags) && tags.includes(activationFlag)) {
+        allowed = true;
+        break;
+      }
+    }
+  }
+
   const allCells: ParsedCell[] = notebook.cellsArray.map(
     (cell: Cell, index: number): ParsedCell => {
       const type = getCellType(
@@ -108,7 +124,7 @@ const parseNB = (
     }
   }
 
-  return [allCells, activeIndex];
+  return [allCells, activeIndex, allowed];
 };
 
 function removeOutputTextFromInputText(

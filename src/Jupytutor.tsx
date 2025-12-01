@@ -10,7 +10,6 @@ import ContextRetrieval, {
 } from './helpers/contextRetrieval';
 import { formatMessage } from './helpers/messageFormatting';
 import { DEMO_PRINTS } from '.';
-import config from './config';
 
 export interface JupytutorProps {
   autograderResponse: string | undefined;
@@ -27,6 +26,7 @@ export interface JupytutorProps {
     | 'error'
     | 'grader_not_initialized';
   userId: string | null;
+  config: any;
 }
 
 interface ChatHistoryItem {
@@ -44,7 +44,13 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
 
   const [liveResult, setLiveResult] = useState<string | null>(null);
 
-  const { sendTextbookWithRequest, contextRetriever, cellType, userId } = props;
+  const {
+    sendTextbookWithRequest,
+    contextRetriever,
+    cellType,
+    userId,
+    config
+  } = props;
 
   const createChatContextFromCells = (
     cells: ParsedCell[]
@@ -852,7 +858,8 @@ class JupytutorWidget extends ReactWidget {
       sendTextbookWithRequest: false,
       contextRetriever: null,
       cellType: 'code',
-      userId: null
+      userId: null,
+      config: {}
     }
   ) {
     super();

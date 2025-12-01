@@ -76,7 +76,21 @@ const plugin: JupyterFrontEndPlugin<void> = {
         }
 
         // Parse the notebook to get all cells and their links
-        const [allCells, _] = parseNB(notebook);
+        const [allCells, _, allowed] = parseNB(
+          notebook,
+          undefined,
+          finalConfig.activation_flag ?? ''
+        );
+
+        // Skip context gathering if activation flag criteria not met
+        if (!allowed) {
+          if (DEMO_PRINTS) {
+            console.log(
+              'Activation flag not found in notebook. Skipping context gathering.'
+            );
+          }
+          return;
+        }
         if (DEMO_PRINTS) {
           console.log(
             'Initial load: Gathered all cells from notebook:',
@@ -188,7 +202,16 @@ const plugin: JupyterFrontEndPlugin<void> = {
           const codeCell = cell as CodeCell;
 
           // activeIndex is guaranteed to be the cell just run within parseNB by cross-referencing cell
-          const [allCells, activeIndex] = parseNB(notebook, codeCell);
+          const [allCells, activeIndex, allowed] = parseNB(
+            notebook,
+            codeCell,
+            finalConfig.activation_flag ?? ''
+          );
+
+          // Skip showing UI if activation flag criteria not met
+          if (!allowed) {
+            return;
+          }
 
           if (codeCell.outputArea && codeCell.outputArea.layout) {
             const autograderResponse =
@@ -202,7 +225,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
               sendTextbookWithRequest: SEND_TEXTBOOK_WITH_REQUEST,
               contextRetriever,
               cellType: cellType,
-              userId: userId
+              userId: userId,
+              config: finalConfig
             });
 
             (codeCell.outputArea.layout as any).addWidget(jupytutor);
@@ -211,7 +235,16 @@ const plugin: JupyterFrontEndPlugin<void> = {
           // CAN DEFINE OTHER BEHAVIORS! INCLUDING MAP TO STORE ALL THE RELEVANT CONTEXT
         } else if (finalConfig.usage.show_on_free_response) {
           // For markdown cells, create a proper ReactWidget mounting
-          const [allCells, activeIndex] = parseNB(notebook, undefined);
+          const [allCells, activeIndex, allowed] = parseNB(
+            notebook,
+            undefined,
+            finalConfig.activation_flag ?? ''
+          );
+
+          // Skip showing UI if activation flag criteria not met
+          if (!allowed) {
+            return;
+          }
 
           const cellType: string | null = allCells[activeIndex].type;
 
@@ -225,7 +258,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
               sendTextbookWithRequest: SEND_TEXTBOOK_WITH_REQUEST,
               contextRetriever,
               cellType: cellType,
-              userId: userId
+              userId: userId,
+              config: finalConfig
             });
 
             // Check if there's already a JupyTutor widget in this cell and remove it

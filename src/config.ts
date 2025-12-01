@@ -7,12 +7,14 @@
  */
 export const config = {
   api: {
-    baseURL: 'http://localhost:3000/'
+    // baseURL: 'http://localhost:3000/'
+    baseURL:
+      'https://server-jupytutor-cmeghve8dyf3agde.westus-01.azurewebsites.net/'
   },
   usage: {
     show_on_success: true, // For asking questions, not effective if context_gathering is disabled
     show_on_free_response: true, // For asking questions, not effective if context_gathering is disabled
-    automatic_first_query_on_error: true,
+    automatic_first_query_on_error: false,
     use_streaming: true // Stream in the text responses instead of sending the entire response at once
   },
   context_gathering: {
@@ -31,10 +33,11 @@ export const config = {
   keywords: {
     // This is tested on the current cell and the one immediately before it. The current cell must be unlocked.
     free_response_regex:
-      /.*question\s+\d+(?:\.\d+)*\.\s+.*\(?\d+\s+points\)?.*/i,
+      /.*question\s+\d+(?:\.\d+)*\.?\s*.*(?:\(?\d+\s+points\)?)?.*/i,
     // This is tested on the output of the current code cell (autograder output).
     success_regex: /.* passed!.*/i
   },
+  activation_flag: 'jupytutor-activated-can-be-a-tag-of-any-cell', // If not empty, will only parse the notebook and run the plug-in if the activation flag is present in ANY cell's tags
   instructor_note: '' // NOT IMPLEMENTED YET
 };
 
