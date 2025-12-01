@@ -116,14 +116,14 @@ async function makeAPIRequest(endpoint, options = {}) {
       delete requestOptions.body;
     }
 
-    if (DEMO_PRINTS) {
-      console.log('API Request:', {
-        url: `${baseURL}${endpoint}`,
-        method: requestOptions.method,
-        headers: requestOptions.headers,
-        body: body instanceof FormData ? 'FormData' : body
-      });
-    }
+    // if (DEMO_PRINTS) {
+    //   console.log('API Request:', {
+    //     url: `${baseURL}${endpoint}`,
+    //     method: requestOptions.method,
+    //     headers: requestOptions.headers,
+    //     body: body instanceof FormData ? 'FormData' : body
+    //   });
+    // }
 
     // Make the request
     const response = await fetch(`${baseURL}${endpoint}`, requestOptions);

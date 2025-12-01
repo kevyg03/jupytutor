@@ -57,6 +57,10 @@ const parseNB = (
     }
   }
 
+  if (!allowed) {
+    return [[], -1, false]; // return an empty array and -1 for activeIndex to indicate no cells were parsed
+  }
+
   const allCells: ParsedCell[] = notebook.cellsArray.map(
     (cell: Cell, index: number): ParsedCell => {
       const type = getCellType(
@@ -120,7 +124,7 @@ const parseNB = (
       cell.outputArea.layout.widgets[0].node.innerText
     ) {
       activeIndex -= 1;
-      console.log('ACTIVE INDEX CORRECTION PERFORMED');
+      console.log('[Jupytutor]: ACTIVE INDEX CORRECTION PERFORMED');
     }
   }
 

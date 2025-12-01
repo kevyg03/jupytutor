@@ -81,9 +81,11 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
           noShow: true
         }
       ];
-      if (DEMO_PRINTS) console.log('Sending textbook with request');
+      if (DEMO_PRINTS)
+        console.log('[Jupytutor]: Sending textbook with request');
     } else {
-      if (DEMO_PRINTS) console.log('NOT sending textbook with request');
+      if (DEMO_PRINTS)
+        console.log('[Jupytutor]: NOT sending textbook with request');
     }
 
     const notebookContext: ChatHistoryItem[] = cells.map(cell => {
@@ -105,7 +107,9 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
         };
       } else if (cell.type === 'free_response') {
         if (DEMO_PRINTS)
-          console.log('Sending free response prompt with request!');
+          console.log(
+            '[Jupytutor]: Sending free response prompt with request!'
+          );
         return {
           role: 'system' as const,
           content: [
@@ -224,7 +228,11 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
 
   // Debug chat history changes
   useEffect(() => {
-    if (DEMO_PRINTS) console.log('Chat history changed:', chatHistory);
+    if (DEMO_PRINTS)
+      console.log(
+        '[Jupytutor]: Chat history changed.'
+        //, chatHistory
+      );
   }, [chatHistory]);
 
   /**
@@ -280,14 +288,17 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
 
       if (DEMO_PRINTS) {
         console.log(
-          `Created file: ${filename}, type: ${mimeType}, size: ${file.size} bytes`
+          `[Jupytutor]: Created file: ${filename}, type: ${mimeType}, size: ${file.size} bytes`
         );
       }
 
       return file;
     } catch (error) {
-      console.error('Error converting data URL to File:', error);
-      console.error('Data URL preview:', dataUrl.substring(0, 100) + '...');
+      console.error('[Jupytutor]: Error converting data URL to File:', error);
+      console.error(
+        '[Jupytutor]: Data URL preview:',
+        dataUrl.substring(0, 100) + '...'
+      );
       throw new Error(
         `Invalid data URL format: ${error instanceof Error ? error.message : String(error)}`
       );
@@ -323,7 +334,10 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
     const images = gatherImagesFromCells(props.allCells, 10, 5);
 
     if (DEMO_PRINTS && images.length > 0) {
-      console.log('First image preview:', images[0].substring(0, 100) + '...');
+      console.log(
+        '[Jupytutor]: Image detected.'
+        //images[0].substring(0, 100) + '...'
+      );
     }
 
     try {
@@ -506,48 +520,51 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
   ) => {
     if (data?.newChatHistory) {
       if (DEMO_PRINTS)
-        console.log('Server returned newChatHistory:', data.newChatHistory);
+        console.log(
+          '[Jupytutor]: Server returned newChatHistory:'
+          //data.newChatHistory
+        );
       // Replace the entire chat history with the server response
       let finalChatHistory = data.newChatHistory;
       if (DEMO_PRINTS)
-        console.log(
-          'finalChatHistory',
-          finalChatHistory,
-          'firstQuery',
-          firstQuery
-        );
-      if (firstQuery) {
-        // Hide the system reasoning item if present (defensive guard)
-        const idxToHide = finalChatHistory.length - 3;
-        if (
-          idxToHide >= 0 &&
-          idxToHide < finalChatHistory.length &&
-          finalChatHistory[idxToHide]
-        ) {
-          finalChatHistory[idxToHide].noShow = true;
-        }
-
-        // Additionally hide the auto user message (default newMessage) if the backend returns it
-        finalChatHistory = finalChatHistory.map((item: any) => {
-          if (item?.role === 'user') {
-            let text: string | undefined;
-            if (typeof item.content === 'string') {
-              text = item.content;
-            } else if (
-              Array.isArray(item.content) &&
-              item.content.length > 0 &&
-              item.content[0] &&
-              typeof item.content[0].text === 'string'
-            ) {
-              text = item.content[0].text;
-            }
-            if (text === newMessage) {
-              return { ...item, noShow: true };
-            }
+        if (firstQuery) {
+          // console.log(
+          //   'finalChatHistory',
+          //   finalChatHistory,
+          //   'firstQuery',
+          //   firstQuery
+          // );
+          // Hide the system reasoning item if present (defensive guard)
+          const idxToHide = finalChatHistory.length - 3;
+          if (
+            idxToHide >= 0 &&
+            idxToHide < finalChatHistory.length &&
+            finalChatHistory[idxToHide]
+          ) {
+            finalChatHistory[idxToHide].noShow = true;
           }
-          return item;
-        });
-      }
+
+          // Additionally hide the auto user message (default newMessage) if the backend returns it
+          finalChatHistory = finalChatHistory.map((item: any) => {
+            if (item?.role === 'user') {
+              let text: string | undefined;
+              if (typeof item.content === 'string') {
+                text = item.content;
+              } else if (
+                Array.isArray(item.content) &&
+                item.content.length > 0 &&
+                item.content[0] &&
+                typeof item.content[0].text === 'string'
+              ) {
+                text = item.content[0].text;
+              }
+              if (text === newMessage) {
+                return { ...item, noShow: true };
+              }
+            }
+            return item;
+          });
+        }
       setChatHistory(finalChatHistory);
 
       // Only mark initial context as gathered after successful first query
@@ -556,7 +573,10 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
       }
     } else {
       if (DEMO_PRINTS)
-        console.log('Chat history not send, appending as fallback', data);
+        console.log(
+          '[Jupytutor]: Chat history not send, appending as fallback',
+          data
+        );
       // If server doesn't return newChatHistory, append the assistant response
       // This is a fallback to ensure the conversation continues
       const assistantMessage: ChatHistoryItem = {

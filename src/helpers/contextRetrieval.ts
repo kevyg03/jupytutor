@@ -530,7 +530,9 @@ const scrapePageText = async (
       if (response.status === 404) {
         return null;
       }
-      console.log(`HTTP ${response.status}: ${response.statusText}`);
+      console.log(
+        `[Jupytutor]: HTTP ${response.status}: ${response.statusText}`
+      );
       return null;
     }
 

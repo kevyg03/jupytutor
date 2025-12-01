@@ -51,7 +51,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
     // Try to load user config from ~/.config/jupytutor/config.json
     let finalConfig = await loadConfiguration();
     if (DEMO_PRINTS) {
-      console.log('Loaded configuration:', finalConfig);
+      console.log(
+        '[Jupytutor]: Loaded configuration.'
+        // finalConfig
+      );
     }
 
     const SEND_TEXTBOOK_WITH_REQUEST = finalConfig.context_gathering.enabled;
@@ -59,11 +62,12 @@ const plugin: JupyterFrontEndPlugin<void> = {
     // Get the DataHub user identifier
     const userId = getUserIdentifier();
     if (DEMO_PRINTS) {
-      console.log('Current URL:', window.location.href);
-      console.log('DataHub User ID:', userId);
+      // console.log('Current URL:', window.location.href);
+      // console.log('DataHub User ID:', userId);
     }
 
     let contextRetriever: ContextRetrieval | null = null;
+    let allowed = true; // DEFAULT, THEN CHECKS FOR FLAG ON FIRST PARSE
 
     // GATHER CONTEXT IMMEDIATELY (doesn't need to stay up to date, just happens once)
     const gatherContext = async () => {
@@ -71,30 +75,33 @@ const plugin: JupyterFrontEndPlugin<void> = {
         // Get the current active notebook
         const notebook = tracker.currentWidget?.content;
         if (!notebook) {
-          console.log('No active notebook found for context gathering');
+          console.log(
+            '[Jupytutor]: No active notebook found for context gathering'
+          );
           return;
         }
 
         // Parse the notebook to get all cells and their links
-        const [allCells, _, allowed] = parseNB(
+        const [allCells, _, allowed_value] = parseNB(
           notebook,
           undefined,
           finalConfig.activation_flag ?? ''
         );
+        allowed = allowed_value; // set this globally
 
         // Skip context gathering if activation flag criteria not met
         if (!allowed) {
           if (DEMO_PRINTS) {
             console.log(
-              'Activation flag not found in notebook. Skipping context gathering.'
+              '[Jupytutor]: Activation flag not found in notebook. Skipping context gathering.'
             );
           }
           return;
         }
         if (DEMO_PRINTS) {
           console.log(
-            'Initial load: Gathered all cells from notebook:',
-            allCells
+            '[Jupytutor]: Gathered all cells from notebook on initial load.'
+            // allCells
           );
         }
 
@@ -108,7 +115,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
         const uniqueLinks = Array.from(allLinks);
         if (DEMO_PRINTS) {
-          console.log('Gathered unique links from notebook:', uniqueLinks);
+          console.log(
+            '[Jupytutor]: Gathered unique links from notebook:',
+            uniqueLinks
+          );
         }
 
         // Create ContextRetrieval instance with the gathered links
@@ -128,13 +138,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
         // print this after 3 seconds have passed
         setTimeout(() => {
           if (DEMO_PRINTS) {
-            console.log('Textbook Context Gathering Completed\n');
+            console.log('[Jupytutor]: Textbook Context Gathering Completed\n');
             console.log(
-              'Starting Textbook Prompt:\n',
+              '[Jupytutor]: Starting Textbook Prompt:\n',
               STARTING_TEXTBOOK_CONTEXT
             );
             console.log(
-              'Textbook Context Snippet:\n',
+              '[Jupytutor]: Textbook Context Snippet:\n',
               contextRetriever
                 ?.getContext()
                 ?.substring(
@@ -143,17 +153,17 @@ const plugin: JupyterFrontEndPlugin<void> = {
                 )
             );
             console.log(
-              'Textbook Context Length:\n',
+              '[Jupytutor]: Textbook Context Length:\n',
               contextRetriever?.getContext()?.length
             );
             console.log(
-              'Textbook Source Links:\n',
+              '[Jupytutor]: Textbook Source Links:\n',
               contextRetriever?.getSourceLinks()
             );
           }
         }, 3000);
       } catch (error) {
-        console.error('Error gathering context:', error);
+        console.error('[Jupytutor]: Error gathering context:', error);
       }
     };
 
@@ -177,6 +187,10 @@ const plugin: JupyterFrontEndPlugin<void> = {
     // Listen for the execution of a cell. [1, 3, 6]
     NotebookActions.executed.connect(
       (_, args: { notebook: any; cell: Cell; success: boolean }) => {
+        if (!allowed) {
+          // NEVER DO ANYTHING IF THE ACTIVATION FLAG IS NOT MET, NO MATTER WHAT
+          return;
+        }
         const { cell, success, notebook } = args;
 
         const cellType = getCellType(cell, success);
@@ -326,7 +340,7 @@ const loadConfiguration = async () => {
     // Config file doesn't exist or failed to load - use default config
     if (DEMO_PRINTS) {
       console.log(
-        'No user config found at ~/.config/jupytutor/config.json, using default config'
+        '[Jupytutor]: No user config found at ~/.config/jupytutor/config.json, using default config'
       );
     }
   }
