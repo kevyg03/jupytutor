@@ -85,7 +85,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
         const [allCells, _, allowed_value] = parseNB(
           notebook,
           undefined,
-          finalConfig.activation_flag ?? ''
+          finalConfig.activation_flag ?? '',
+          finalConfig.deactivation_flag ?? ''
         );
         allowed = allowed_value; // set this globally
 
@@ -219,7 +220,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
           const [allCells, activeIndex, allowed] = parseNB(
             notebook,
             codeCell,
-            finalConfig.activation_flag ?? ''
+            finalConfig.activation_flag ?? '',
+            finalConfig.deactivation_flag ?? ''
           );
 
           // Skip showing UI if activation flag criteria not met
@@ -252,7 +254,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
           const [allCells, activeIndex, allowed] = parseNB(
             notebook,
             undefined,
-            finalConfig.activation_flag ?? ''
+            finalConfig.activation_flag ?? '',
+            finalConfig.deactivation_flag ?? ''
           );
 
           // Skip showing UI if activation flag criteria not met

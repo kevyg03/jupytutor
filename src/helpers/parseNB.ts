@@ -40,11 +40,42 @@ export interface ParsedCell {
 const parseNB = (
   notebook: any,
   cell: CodeCell | undefined = undefined,
-  activationFlag: string = ''
+  activationFlag: string = '',
+  deactivationFlag: string = ''
 ): [ParsedCell[], number, boolean] => {
   let activeIndex = notebook.activeCellIndex;
+  const allowed = checkIfEnabled(notebook, activationFlag, deactivationFlag);
+  if (!allowed) {
+    return [[], -1, false]; // return an empty array and -1 for activeIndex to indicate no cells were parsed
+  }
 
-  // Check for activation flag in any cell's tags if provided
+  const allCells: ParsedCell[] = notebook.cellsArray.map(
+    (cell: Cell, index: number): ParsedCell => parseCell(cell, index, notebook)
+  );
+
+  // cross-reference provided cell to adjust activeIndex, tends to be one ahead when cell is run
+  // but we don't want this to break if someone runs the cell manually / has different settings
+  if (cell != undefined && activeIndex !== 0) {
+    if (
+      allCells[activeIndex - 1].outputText ===
+      cell.outputArea.layout.widgets[0].node.innerText
+    ) {
+      activeIndex -= 1;
+      console.log(
+        '[Jupytutor]: ACTIVE INDEX CORRECTION PERFORMED TO',
+        activeIndex
+      );
+    }
+  }
+
+  return [allCells, activeIndex, allowed];
+};
+
+function checkIfEnabled(
+  notebook: any,
+  activationFlag: string,
+  deactivationFlag: string = ''
+): boolean {
   let allowed = true;
   if (activationFlag && activationFlag !== '') {
     allowed = false;
@@ -56,80 +87,79 @@ const parseNB = (
       }
     }
   }
-
-  if (!allowed) {
-    return [[], -1, false]; // return an empty array and -1 for activeIndex to indicate no cells were parsed
-  }
-
-  const allCells: ParsedCell[] = notebook.cellsArray.map(
-    (cell: Cell, index: number): ParsedCell => {
-      const type = getCellType(
-        cell,
-        true,
-        index > 0 ? notebook.cellsArray[index - 1] : undefined
-      );
-      let cellObj: ParsedCell = {
-        index,
-        type,
-        html: cell.node.innerHTML,
-        text: cell.node.innerText,
-        outputText: null,
-        outputHtml: null,
-        images: findImageSources(cell.node.innerHTML),
-        links: findHyperlinks(cell.node.innerHTML)
-      };
+  if (allowed && deactivationFlag && deactivationFlag !== '') {
+    // check for deactivation flag in the content of the innerHTML and if its a code cell
+    for (const cell of notebook.cellsArray) {
       if (
-        type === 'grader' ||
-        type === 'code' ||
-        type === 'error' ||
-        type === 'success'
+        cell.node.innerText.includes(deactivationFlag) &&
+        cell.model.type === 'code'
       ) {
-        const codeCell = cell as CodeCell;
-        if (codeCell.outputArea.layout.widgets?.length > 0) {
-          cellObj.outputText =
-            codeCell.outputArea.layout.widgets[0].node.innerText;
-          cellObj.text = removeOutputTextFromInputText(
-            cellObj.text,
-            cellObj.outputText ?? ''
-          );
-          cellObj.outputHtml =
-            codeCell.outputArea.layout.widgets[0].node.innerHTML;
-          cellObj.html = removeOutputTextFromInputText(
-            cellObj.html,
-            cellObj.outputHtml ?? ''
-          );
-          cellObj.images = [
-            ...cellObj.images,
-            ...findImageSources(
-              codeCell.outputArea.layout.widgets[0].node.innerHTML
-            )
-          ];
-          // cellObj.links = [
-          //   ...cellObj.links,
-          //   ...findHyperlinks(
-          //     codeCell.outputArea.layout.widgets[0].node.innerHTML
-          //   )
-          // ];
-        }
+        allowed = false;
+        break;
       }
-      return cellObj;
-    }
-  );
-
-  // cross-reference provided cell to adjust activeIndex, tends to be one ahead when cell is run
-  // but we don't want this to break if someone runs the cell manually / has different settings
-  if (cell != undefined && activeIndex !== 0) {
-    if (
-      allCells[activeIndex - 1].outputText ===
-      cell.outputArea.layout.widgets[0].node.innerText
-    ) {
-      activeIndex -= 1;
-      console.log('[Jupytutor]: ACTIVE INDEX CORRECTION PERFORMED');
     }
   }
+  return allowed; // if activationFlag is not provided or empty, return true by default
+}
 
-  return [allCells, activeIndex, allowed];
-};
+/**
+ * Also involves the previous cell to get the type of the current cell for checking free response.
+ * Don't believe this should be an issue while keeping things live since the notebook object is always up to date.
+ *
+ * If it's coding cell, we should always update (e.g. random simulation runs, etc.).
+ * If it's markdown, we should only update if the innerHTML has changed (to avoid unnecessary re-renders).
+ * The pip install for jupytutor can be about 10,000 characters. We should restrict inputs to the first 2-3k characters in the findSOMETHING functions.
+ *
+ * @param cell - the cell to parse
+ * @param index - the index of the cell in the notebook
+ * @param notebook - the notebook object
+ *
+ * @returns the parsed cell
+ */
+function parseCell(cell: Cell, index: number, notebook: any): ParsedCell {
+  const type = getCellType(
+    cell,
+    true,
+    index > 0 ? notebook.cellsArray[index - 1] : undefined
+  );
+  let cellObj: ParsedCell = {
+    index,
+    type,
+    html: cell.node.innerHTML,
+    text: cell.node.innerText,
+    outputText: null,
+    outputHtml: null,
+    images: findImageSources(cell.node.innerHTML),
+    links: findHyperlinks(cell.node.innerHTML)
+  };
+  if (
+    type === 'grader' ||
+    type === 'code' ||
+    type === 'error' ||
+    type === 'success'
+  ) {
+    const codeCell = cell as CodeCell;
+    if (codeCell.outputArea.layout.widgets?.length > 0) {
+      cellObj.outputText = codeCell.outputArea.layout.widgets[0].node.innerText;
+      cellObj.text = removeOutputTextFromInputText(
+        cellObj.text,
+        cellObj.outputText ?? ''
+      );
+      cellObj.outputHtml = codeCell.outputArea.layout.widgets[0].node.innerHTML;
+      cellObj.html = removeOutputTextFromInputText(
+        cellObj.html,
+        cellObj.outputHtml ?? ''
+      );
+      cellObj.images = [
+        ...cellObj.images,
+        ...findImageSources(
+          codeCell.outputArea.layout.widgets[0].node.innerHTML
+        )
+      ];
+    }
+  }
+  return cellObj;
+}
 
 function removeOutputTextFromInputText(
   inputText: string,

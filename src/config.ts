@@ -38,6 +38,7 @@ export const config = {
     success_regex: /.* passed!.*/i
   },
   activation_flag: 'jupytutor-activated-can-be-a-tag-of-any-cell', // If not empty, will only parse the notebook and run the plug-in if the activation flag is present in ANY cell's tags
+  deactivation_flag: 'jupytutor: false', // IF IT IS NOT "" AND APPEARS IN ANY CODE CELL, THE PLUGIN WILL BE DEACTIVATED
   instructor_note: '' // NOT IMPLEMENTED YET
 };
 
