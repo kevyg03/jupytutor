@@ -1,6 +1,6 @@
 import { Notebook } from '@jupyterlab/notebook';
 import getCellType, { ParsedCellType } from './getCellType';
-import { Cell, CodeCell } from '@jupyterlab/cells';
+import { Cell, CodeCell, CodeCellModel } from '@jupyterlab/cells';
 
 /**
  * For each cell, should get the Type and return any relevant information whether its:
@@ -34,25 +34,37 @@ export interface ParsedCell {
  *
  * @param cell the Jupyter Cell in question
  * @param success whether or not the cell ran successfully without error
- * @param activationFlag if provided, checks if ANY cell has this flag in its tags
  *
  * @returns allCells, activeIndex, allowed
  */
 const parseNB = (
   notebook: Notebook,
-  cell: CodeCell | undefined = undefined,
-  activationFlag: string = '',
-  deactivationFlag: string = ''
-): [ParsedCell[], number, boolean] => {
+  cell: CodeCell | undefined = undefined
+): [ParsedCell[], number] => {
   let activeIndex = notebook.activeCellIndex;
-  const allowed = checkIfEnabled(notebook, activationFlag, deactivationFlag);
-  if (!allowed) {
-    return [[], -1, false]; // return an empty array and -1 for activeIndex to indicate no cells were parsed
+
+  const cells = notebook.model?.cells ?? [];
+
+  for (const cell of cells) {
+    console.log(cell, cell.id, cell.type);
+    console.log(cell.sharedModel.getSource());
+
+    if (cell.type === 'code') {
+      console.log('IS CODE');
+      const codeCell = cell as CodeCellModel;
+      console.log('OUTPUTS LENGTH', codeCell.outputs.length);
+      for (let i = 0; i < codeCell.outputs.length; i++) {
+        console.log('OUTPUT', i);
+        const output = codeCell.outputs.get(i);
+        console.log(output);
+      }
+    }
   }
 
   // @ts-expect-error cellsArray is protected; we will probably remove this soon anyway
   const allCells: ParsedCell[] = notebook.cellsArray.map(
-    (cell: Cell, index: number): ParsedCell => parseCell(cell, index, notebook)
+    (cell: Cell, index: number): ParsedCell =>
+      parseRenderedCell(cell, index, notebook)
   );
 
   // cross-reference provided cell to adjust activeIndex, tends to be one ahead when cell is run
@@ -70,40 +82,8 @@ const parseNB = (
     }
   }
 
-  return [allCells, activeIndex, allowed];
+  return [allCells, activeIndex];
 };
-
-function checkIfEnabled(
-  notebook: any,
-  activationFlag: string,
-  deactivationFlag: string = ''
-): boolean {
-  let allowed = true;
-  if (activationFlag && activationFlag !== '') {
-    allowed = false;
-    for (const cell of notebook.cellsArray) {
-      const tags = cell.model.getMetadata('tags');
-      if (tags && Array.isArray(tags) && tags.includes(activationFlag)) {
-        allowed = true;
-        console.log('[Jupytutor]: Activation flag found in cell tags.');
-        break;
-      }
-    }
-  }
-  if (allowed && deactivationFlag && deactivationFlag !== '') {
-    // check for deactivation flag in the content of the innerHTML and if its a code cell
-    for (const cell of notebook.cellsArray) {
-      if (
-        cell.node.innerText.includes(deactivationFlag) &&
-        cell.model.type === 'code'
-      ) {
-        allowed = false;
-        break;
-      }
-    }
-  }
-  return allowed; // if activationFlag is not provided or empty, return true by default
-}
 
 /**
  * Also involves the previous cell to get the type of the current cell for checking free response.
@@ -119,7 +99,11 @@ function checkIfEnabled(
  *
  * @returns the parsed cell
  */
-function parseCell(cell: Cell, index: number, notebook: any): ParsedCell {
+function parseRenderedCell(
+  cell: Cell,
+  index: number,
+  notebook: any
+): ParsedCell {
   const type = getCellType(
     cell,
     true,

@@ -3,7 +3,11 @@ import {
   JupyterFrontEndPlugin
 } from '@jupyterlab/application';
 import { Cell, CodeCell } from '@jupyterlab/cells';
-import { INotebookTracker, Notebook, NotebookActions } from '@jupyterlab/notebook';
+import {
+  INotebookTracker,
+  Notebook,
+  NotebookActions
+} from '@jupyterlab/notebook';
 import { ServerConnection } from '@jupyterlab/services';
 import { Widget } from '@lumino/widgets';
 import JupytutorWidget from './Jupytutor';
@@ -14,6 +18,7 @@ import NotebookContextRetrieval, {
 } from './helpers/context/notebookContextRetrieval';
 import getCellType, { ParsedCellType } from './helpers/getCellType';
 import parseNB from './helpers/parseNB';
+import { JupytutorNotebookMetadataSchema } from './schemas/notebook-metadata';
 
 // Destructure the configuration
 // const {
@@ -68,7 +73,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     const userId = getUserIdentifier();
 
     let notebookContextRetriever: NotebookContextRetrieval | null = null;
-    let pluginEnabled: boolean;
+    let pluginEnabled: boolean = false;
 
     const gatherNotebookContext = async () => {
       try {
@@ -89,16 +94,16 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
         const notebook = currentWidget.content;
 
-        // console.log('nb content', notebook);
+        const jupytutorMetadata =
+          notebook.model?.getMetadata('jupytutor') ?? {};
+        const parsedMetadata =
+          JupytutorNotebookMetadataSchema.parse(jupytutorMetadata);
+
+          // TODO: listen for changes
+        pluginEnabled = parsedMetadata.enabled;
 
         // Parse the notebook to get all cells and their links
-        const [allCells, _, allowedByNotebook] = parseNB(
-          notebook,
-          undefined,
-          finalConfig.activation_flag ?? '',
-          finalConfig.deactivation_flag ?? ''
-        );
-        pluginEnabled = allowedByNotebook; // set this globally
+        const [allCells, _] = parseNB(notebook, undefined);
 
         // Skip context gathering if activation flag criteria not met
         if (!pluginEnabled) {
@@ -187,17 +192,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
           const codeCell = cell as CodeCell;
 
           // activeIndex is guaranteed to be the cell just run within parseNB by cross-referencing cell
-          const [allCells, activeIndex, allowed] = parseNB(
-            notebook,
-            codeCell,
-            finalConfig.activation_flag ?? '',
-            finalConfig.deactivation_flag ?? ''
-          );
-
-          // Skip showing UI if activation flag criteria not met
-          if (!allowed) {
-            return;
-          }
+          const [allCells, activeIndex] = parseNB(notebook, codeCell);
 
           if (codeCell.outputArea && codeCell.outputArea.layout) {
             const autograderResponse =
@@ -222,17 +217,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
             return;
           }
           // For markdown cells, create a proper ReactWidget mounting
-          const [allCells, activeIndex, allowed] = parseNB(
-            notebook,
-            undefined,
-            finalConfig.activation_flag ?? '',
-            finalConfig.deactivation_flag ?? ''
-          );
-
-          // Skip showing UI if activation flag criteria not met
-          if (!allowed) {
-            return;
-          }
+          const [allCells, activeIndex] = parseNB(notebook, undefined);
 
           const cellType: ParsedCellType | null = allCells[activeIndex].type;
 

@@ -64,7 +64,8 @@
         "browser": "^0.2.6",
         "html-to-text": "^9.0.5",
         "react": "^18.2.0",
-        "react-dom": "^18.2.0"
+        "react-dom": "^18.2.0",
+        "zod": "^4.3.5"
     },
     "devDependencies": {
         "@jupyterlab/builder": "^4.0.0",
