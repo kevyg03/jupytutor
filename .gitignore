@@ -123,3 +123,9 @@ dmypy.json
 
 # Yarn cache
 .yarn/
+
+# Python virtual environment
+.venv/
+
+# Test notebooks
+materials/

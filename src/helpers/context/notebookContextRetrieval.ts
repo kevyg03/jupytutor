@@ -18,6 +18,11 @@ export interface ContextRetrievalConfig {
   debug?: boolean;
 }
 
+// Permit the plugin to start working before context is collected, if it takes longer than
+// this amount of time. It'll keep running context collection in the background, if it takes
+// longer.
+const SOFT_TIMEOUT = 5000;
+
 /**
  * Class to retrieve context for the assignment
  *
@@ -30,9 +35,10 @@ export interface ContextRetrievalConfig {
  *
  * Jupyterbook urls are expanded to include the whole subsection. If it's a subsection, the order is [subsection, main, other subsections in order]
  */
-class ContextRetrieval {
+class NotebookContextRetrieval {
   private _context: string | null;
-  private _loaded: boolean;
+  private _loadedPromise: Promise<void>;
+  private _softTimeoutPromise: Promise<void>;
   private _sourceLinks: string[];
   private _blacklistedURLs: string[];
   private _whitelistedURLs: string[];
@@ -54,21 +60,24 @@ class ContextRetrieval {
     this._sourceLinks = sourceLinks;
     this._blacklistedURLs = blacklistedURLs;
     this._whitelistedURLs = whitelistedURLs;
-    this._loaded = false;
+    this._loadedPromise = (async () => {
+      if (!debug) {
+        if (attemptJupyterbookLinkExpansion) {
+          await this._expandJupyterBookLinksAsync(jupyterbookURL);
+        }
 
-    if (!debug) {
-      if (attemptJupyterbookLinkExpansion) {
-        this._expandJupyterBookLinksAsync(jupyterbookURL);
-      } else {
         this.scrapeSourceLinks();
       }
-    }
+    })();
+    this._softTimeoutPromise = Promise.race([
+      this._loadedPromise,
+      new Promise<void>(resolve => setTimeout(resolve, SOFT_TIMEOUT))
+    ]);
   }
 
   async scrapeSourceLinks(): Promise<void> {
     if (this._sourceLinks.length === 0) {
       this._context = null;
-      this._loaded = true;
       return;
     }
 
@@ -99,19 +108,29 @@ class ContextRetrieval {
     if (this._context === '') {
       this._context = null;
     }
-    this._loaded = true;
   }
 
-  getContext(): string | null {
-    if (!this._loaded) console.error('Context still loading.');
-    else if (this._context === null) {
-      console.error('Context does not lead to any detected resource text.');
+  async getContext(enforcing: boolean = false): Promise<string | null> {
+    if (enforcing) {
+      await this._loadedPromise;
+    } else {
+      await this._softTimeoutPromise;
+    }
+
+    if (this._context === null) {
+      console.warn('Context does not lead to any detected resource text.');
       return null;
     }
     return this._context;
   }
 
-  getSourceLinks(): string[] {
+  async getSourceLinks(enforcing: boolean = false): Promise<string[]> {
+    if (enforcing) {
+      await this._loadedPromise;
+    } else {
+      await this._softTimeoutPromise;
+    }
+
     return this._sourceLinks;
   }
 
@@ -130,8 +149,6 @@ class ContextRetrieval {
     } catch (error) {
       console.warn('Failed to expand JupyterBook links:', error);
     }
-    // Proceed with normal scraping after expansion
-    this.scrapeSourceLinks();
   }
 
   /**
@@ -140,7 +157,7 @@ class ContextRetrieval {
    * @param jupyterbookURL - the base domain for the JupyterBook
    * @returns expanded array of URLs with additional chapter/section links
    */
-  async expandJupyterBookLinks(
+  private async expandJupyterBookLinks(
     sourceLinks: string[],
     jupyterbookURL: string
   ): Promise<string[]> {
@@ -265,7 +282,7 @@ class ContextRetrieval {
    * @param jupyterbookURL - the base domain for the JupyterBook
    * @returns array of chapter/section links found on the page
    */
-  async findJupyterBookLinks(
+  private async findJupyterBookLinks(
     pageUrl: string,
     jupyterbookURL: string
   ): Promise<string[]> {
@@ -553,4 +570,4 @@ const scrapePageText = async (
   }
 };
 
-export default ContextRetrieval;
+export default NotebookContextRetrieval;

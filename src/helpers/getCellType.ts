@@ -9,6 +9,15 @@ let graderVariableName = '';
 const FREE_RESPONSE_REGEX = config.keywords.free_response_regex;
 const SUCCESS_REGEX = config.keywords.success_regex;
 
+export type ParsedCellType =
+  | 'grader'
+  | 'code'
+  | 'error'
+  | 'text'
+  | 'grader_not_initialized'
+  | 'free_response'
+  | 'success';
+
 /**
  * Determines the type of a cell given
  *
@@ -21,15 +30,7 @@ const getCellType = (
   cell: Cell,
   success: boolean,
   previousCell: Cell | undefined = undefined
-):
-  | 'grader'
-  | 'code'
-  | 'error'
-  | 'text'
-  | 'grader_not_initialized'
-  | 'free_response'
-  | 'success'
-  | null => {
+): ParsedCellType | null => {
   // Only add the UI element if the cell execution was successful.
   if (cell.model.type === 'code') {
     const codeCell = cell as CodeCell;

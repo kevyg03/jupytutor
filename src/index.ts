@@ -2,17 +2,18 @@ import {
   JupyterFrontEnd,
   JupyterFrontEndPlugin
 } from '@jupyterlab/application';
-import { INotebookTracker, NotebookActions } from '@jupyterlab/notebook';
 import { Cell, CodeCell } from '@jupyterlab/cells';
-import JupytutorWidget from './Jupytutor';
-import getCellType from './helpers/getCellType';
-import { Widget } from '@lumino/widgets';
-import parseNB from './helpers/parseNB';
-import ContextRetrieval, {
-  STARTING_TEXTBOOK_CONTEXT
-} from './helpers/contextRetrieval';
-import config from './config';
+import { INotebookTracker, Notebook, NotebookActions } from '@jupyterlab/notebook';
 import { ServerConnection } from '@jupyterlab/services';
+import { Widget } from '@lumino/widgets';
+import JupytutorWidget from './Jupytutor';
+import config from './config';
+import { parseContextFromNotebook } from './helpers/context/notebookContextParsing';
+import NotebookContextRetrieval, {
+  STARTING_TEXTBOOK_CONTEXT
+} from './helpers/context/notebookContextRetrieval';
+import getCellType, { ParsedCellType } from './helpers/getCellType';
+import parseNB from './helpers/parseNB';
 
 // Destructure the configuration
 // const {
@@ -26,6 +27,10 @@ import { ServerConnection } from '@jupyterlab/services';
 // } = config;
 
 export const DEMO_PRINTS = true;
+
+const assertNever = (x: never) => {
+  throw new Error(`Unexpected value: ${x}`);
+};
 
 /**
  * Helper function to extract the user identifier from DataHub-style URLs
@@ -47,7 +52,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     'A Jupyter extension for providing students LLM feedback based on autograder results and supplied course context.',
   autoStart: true,
   requires: [INotebookTracker],
-  activate: async (app: JupyterFrontEnd, tracker: INotebookTracker) => {
+  activate: async (app: JupyterFrontEnd, notebookTracker: INotebookTracker) => {
     // Try to load user config from ~/.config/jupytutor/config.json
     let finalConfig = await loadConfiguration();
     if (DEMO_PRINTS) {
@@ -61,37 +66,42 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
     // Get the DataHub user identifier
     const userId = getUserIdentifier();
-    if (DEMO_PRINTS) {
-      // console.log('Current URL:', window.location.href);
-      // console.log('DataHub User ID:', userId);
-    }
 
-    let contextRetriever: ContextRetrieval | null = null;
-    let allowed = true; // DEFAULT, THEN CHECKS FOR FLAG ON FIRST PARSE
+    let notebookContextRetriever: NotebookContextRetrieval | null = null;
+    let pluginEnabled: boolean;
 
-    // GATHER CONTEXT IMMEDIATELY (doesn't need to stay up to date, just happens once)
-    const gatherContext = async () => {
+    const gatherNotebookContext = async () => {
       try {
-        // Get the current active notebook
-        const notebook = tracker.currentWidget?.content;
-        if (!notebook) {
-          console.log(
+        const currentWidget = notebookTracker.currentWidget;
+
+        if (!currentWidget) {
+          console.warn(
             '[Jupytutor]: No active notebook found for context gathering'
           );
           return;
         }
 
+        await currentWidget.context.ready;
+        await currentWidget.revealed;
+
+        // ok still need this, .ready aint good enough
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        const notebook = currentWidget.content;
+
+        // console.log('nb content', notebook);
+
         // Parse the notebook to get all cells and their links
-        const [allCells, _, allowed_value] = parseNB(
+        const [allCells, _, allowedByNotebook] = parseNB(
           notebook,
           undefined,
           finalConfig.activation_flag ?? '',
           finalConfig.deactivation_flag ?? ''
         );
-        allowed = allowed_value; // set this globally
+        pluginEnabled = allowedByNotebook; // set this globally
 
         // Skip context gathering if activation flag criteria not met
-        if (!allowed) {
+        if (!pluginEnabled) {
           if (DEMO_PRINTS) {
             console.log(
               '[Jupytutor]: Activation flag not found in notebook. Skipping context gathering.'
@@ -99,6 +109,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
           }
           return;
         }
+
         if (DEMO_PRINTS) {
           console.log(
             '[Jupytutor]: Gathered all cells from notebook on initial load.'
@@ -106,89 +117,50 @@ const plugin: JupyterFrontEndPlugin<void> = {
           );
         }
 
-        // Extract all unique links from all cells
-        const allLinks = new Set<string>();
-        allCells.forEach(cell => {
-          if (cell.links && cell.links.length > 0) {
-            cell.links.forEach(link => allLinks.add(link));
-          }
-        });
+        notebookContextRetriever = await parseContextFromNotebook(
+          allCells,
+          finalConfig
+        );
 
-        const uniqueLinks = Array.from(allLinks);
         if (DEMO_PRINTS) {
+          console.log('[Jupytutor]: Textbook Context Gathering Completed\n');
           console.log(
-            '[Jupytutor]: Gathered unique links from notebook:',
-            uniqueLinks
+            '[Jupytutor]: Starting Textbook Prompt:\n',
+            STARTING_TEXTBOOK_CONTEXT
+          );
+          console.log(
+            '[Jupytutor]: Textbook Context Snippet:\n',
+            (await notebookContextRetriever?.getContext())?.substring(
+              STARTING_TEXTBOOK_CONTEXT.length,
+              STARTING_TEXTBOOK_CONTEXT.length + 500
+            )
+          );
+          console.log(
+            '[Jupytutor]: Textbook Context Length:\n',
+            (await notebookContextRetriever?.getContext())?.length
+          );
+          console.log(
+            '[Jupytutor]: Textbook Source Links:\n',
+            await notebookContextRetriever?.getSourceLinks()
           );
         }
-
-        // Create ContextRetrieval instance with the gathered links
-        contextRetriever = new ContextRetrieval({
-          sourceLinks: uniqueLinks,
-          whitelistedURLs: finalConfig.context_gathering.whitelist, // whitelisted URLs
-          blacklistedURLs: finalConfig.context_gathering.blacklist, // blacklisted URLs
-          jupyterbookURL: finalConfig.context_gathering.jupyterbook.url, // jupyterbook URL
-          attemptJupyterbookLinkExpansion:
-            finalConfig.context_gathering.jupyterbook.link_expansion, // attempt JupyterBook link expansion
-          debug: false // debug mode
-        });
-
-        // Store the context retriever globally or make it accessible
-        // (window as any).jupytutorContextRetriever = contextRetriever;
-
-        // print this after 3 seconds have passed
-        setTimeout(() => {
-          if (DEMO_PRINTS) {
-            console.log('[Jupytutor]: Textbook Context Gathering Completed\n');
-            console.log(
-              '[Jupytutor]: Starting Textbook Prompt:\n',
-              STARTING_TEXTBOOK_CONTEXT
-            );
-            console.log(
-              '[Jupytutor]: Textbook Context Snippet:\n',
-              contextRetriever
-                ?.getContext()
-                ?.substring(
-                  STARTING_TEXTBOOK_CONTEXT.length,
-                  STARTING_TEXTBOOK_CONTEXT.length + 500
-                )
-            );
-            console.log(
-              '[Jupytutor]: Textbook Context Length:\n',
-              contextRetriever?.getContext()?.length
-            );
-            console.log(
-              '[Jupytutor]: Textbook Source Links:\n',
-              contextRetriever?.getSourceLinks()
-            );
-          }
-        }, 3000);
       } catch (error) {
         console.error('[Jupytutor]: Error gathering context:', error);
       }
     };
 
-    // Simple sleep function
-    const sleep = (ms: number) =>
-      new Promise(resolve => setTimeout(resolve, ms));
-
     // Gather context when a notebook is opened or becomes active
-    tracker.currentChanged.connect(async () => {
-      await sleep(500); // Give notebook time to fully load
-      gatherContext();
-    });
+    notebookTracker.currentChanged.connect(gatherNotebookContext);
 
     // Also gather context immediately if there's already an active notebook
-    if (tracker.currentWidget) {
-      sleep(500).then(() => {
-        gatherContext();
-      });
+    if (notebookTracker.currentWidget) {
+      gatherNotebookContext();
     }
 
     // Listen for the execution of a cell. [1, 3, 6]
     NotebookActions.executed.connect(
-      (_, args: { notebook: any; cell: Cell; success: boolean }) => {
-        if (!allowed) {
+      (_, args: { notebook: Notebook; cell: Cell; success: boolean }) => {
+        if (!pluginEnabled) {
           // NEVER DO ANYTHING IF THE ACTIVATION FLAG IS NOT MET, NO MATTER WHAT
           return;
         }
@@ -207,13 +179,11 @@ const plugin: JupyterFrontEndPlugin<void> = {
           if (codeCell.outputArea && codeCell.outputArea.layout) {
             (codeCell.outputArea.layout as any).addWidget(error);
           }
-        }
+        } else if (cellType === 'grader' || cellType === 'success') {
+          if (cellType === 'success' && !finalConfig.usage.show_on_success) {
+            return;
+          }
 
-        // Only add the Jupytutor element if it was a grader cell.
-        if (
-          cellType === 'grader' ||
-          (cellType === 'success' && finalConfig.usage.show_on_success)
-        ) {
           const codeCell = cell as CodeCell;
 
           // activeIndex is guaranteed to be the cell just run within parseNB by cross-referencing cell
@@ -237,19 +207,20 @@ const plugin: JupyterFrontEndPlugin<void> = {
               autograderResponse,
               allCells,
               activeIndex,
-              notebookContext: 'upToGrader',
+              localContextScope: 'upToGrader',
               sendTextbookWithRequest: SEND_TEXTBOOK_WITH_REQUEST,
-              contextRetriever,
-              cellType: cellType,
-              userId: userId,
+              notebookContextRetriever,
+              cellType,
+              userId,
               config: finalConfig
             });
 
             (codeCell.outputArea.layout as any).addWidget(jupytutor);
           }
-        } else if (cellType === 'code') {
-          // CAN DEFINE OTHER BEHAVIORS! INCLUDING MAP TO STORE ALL THE RELEVANT CONTEXT
-        } else if (finalConfig.usage.show_on_free_response) {
+        } else if (cellType == 'free_response') {
+          if (!finalConfig.usage.show_on_free_response) {
+            return;
+          }
           // For markdown cells, create a proper ReactWidget mounting
           const [allCells, activeIndex, allowed] = parseNB(
             notebook,
@@ -263,7 +234,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
             return;
           }
 
-          const cellType: string | null = allCells[activeIndex].type;
+          const cellType: ParsedCellType | null = allCells[activeIndex].type;
 
           if (cellType === 'free_response') {
             // Create the Jupytutor widget
@@ -271,11 +242,11 @@ const plugin: JupyterFrontEndPlugin<void> = {
               autograderResponse: '', // No autograder response for free response cells
               allCells,
               activeIndex,
-              notebookContext: 'upToGrader',
+              localContextScope: 'upToGrader',
               sendTextbookWithRequest: SEND_TEXTBOOK_WITH_REQUEST,
-              contextRetriever,
-              cellType: cellType,
-              userId: userId,
+              notebookContextRetriever,
+              cellType,
+              userId,
               config: finalConfig
             });
 
@@ -310,6 +281,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
               jupytutor.update();
             });
           }
+        } else if (
+          cellType === 'code' ||
+          cellType === 'error' ||
+          cellType === 'text' ||
+          cellType === null
+        ) {
+        } else {
+          assertNever(cellType);
         }
       }
     );
@@ -338,6 +317,8 @@ const loadConfiguration = async () => {
           return finalConfig;
         }
       }
+    } else {
+      console.error('ERROR: Failed to load config from server.');
     }
   } catch (error) {
     // Config file doesn't exist or failed to load - use default config

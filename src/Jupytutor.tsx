@@ -5,26 +5,26 @@ import { ParsedCell } from './helpers/parseNB';
 import { ReactWidget } from '@jupyterlab/apputils';
 import { makeAPIRequest } from './helpers/makeAPIRequest';
 import '../style/index.css';
-import ContextRetrieval, {
+import NotebookContextRetrieval, {
   STARTING_TEXTBOOK_CONTEXT
-} from './helpers/contextRetrieval';
+} from './helpers/context/notebookContextRetrieval';
 import { formatMessage } from './helpers/messageFormatting';
 import { DEMO_PRINTS } from '.';
+import { ParsedCellType } from './helpers/getCellType';
 
 export interface JupytutorProps {
   autograderResponse: string | undefined;
   allCells: ParsedCell[];
   activeIndex: number;
-  notebookContext: 'whole' | 'upToGrader' | 'fiveAround' | 'tenAround' | 'none';
+  localContextScope:
+    | 'whole'
+    | 'upToGrader'
+    | 'fiveAround'
+    | 'tenAround'
+    | 'none';
   sendTextbookWithRequest: boolean;
-  contextRetriever: ContextRetrieval | null;
-  cellType:
-    | 'code'
-    | 'free_response'
-    | 'grader'
-    | 'success'
-    | 'error'
-    | 'grader_not_initialized';
+  notebookContextRetriever: NotebookContextRetrieval | null;
+  cellType: ParsedCellType;
   userId: string | null;
   config: any;
 }
@@ -46,18 +46,18 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
 
   const {
     sendTextbookWithRequest,
-    contextRetriever,
+    notebookContextRetriever: contextRetriever,
     cellType,
     userId,
     config
   } = props;
 
-  const createChatContextFromCells = (
+  const createChatContextFromCells = async (
     cells: ParsedCell[]
-  ): ChatHistoryItem[] => {
+  ): Promise<ChatHistoryItem[]> => {
     let textbookContext: ChatHistoryItem[] = [];
     if (sendTextbookWithRequest && contextRetriever != null) {
-      const context = contextRetriever.getContext();
+      const context = await contextRetriever.getContext();
 
       textbookContext = [
         {
@@ -128,7 +128,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
         role: 'system' as const,
         content: [
           {
-            text: cell.text,
+            text: cell.text?.length ? cell.text : (cell.html ?? ''),
             type: 'input_text'
           }
         ],
@@ -169,7 +169,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
     return images.slice(0, maxImages);
   };
 
-  const gatherContext = () => {
+  const gatherContext = async () => {
     const filteredCells = props.allCells.filter(
       cell =>
         cell.images.length > 0 ||
@@ -181,7 +181,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
       cell => cell.index === props.activeIndex
     );
     let contextCells;
-    switch (props.notebookContext) {
+    switch (props.localContextScope) {
       case 'whole':
         contextCells = filteredCells;
         break;
@@ -343,7 +343,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
     try {
       // Only gather context once on the first query
       if (!hasGatheredInitialContext.current) {
-        initialContextData.current = gatherContext();
+        initialContextData.current = await gatherContext();
       }
 
       // For the first query, include initial notebook context
@@ -874,9 +874,9 @@ class JupytutorWidget extends ReactWidget {
       autograderResponse: undefined,
       allCells: [],
       activeIndex: -1,
-      notebookContext: 'upToGrader',
+      localContextScope: 'upToGrader',
       sendTextbookWithRequest: false,
-      contextRetriever: null,
+      notebookContextRetriever: null,
       cellType: 'code',
       userId: null,
       config: {}

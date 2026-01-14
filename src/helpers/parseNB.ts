@@ -1,4 +1,5 @@
-import getCellType from './getCellType';
+import { Notebook } from '@jupyterlab/notebook';
+import getCellType, { ParsedCellType } from './getCellType';
 import { Cell, CodeCell } from '@jupyterlab/cells';
 
 /**
@@ -19,7 +20,7 @@ import { Cell, CodeCell } from '@jupyterlab/cells';
 
 export interface ParsedCell {
   index: number;
-  type: string | null;
+  type: ParsedCellType | null;
   html: string;
   text: string;
   outputText: string | null;
@@ -38,7 +39,7 @@ export interface ParsedCell {
  * @returns allCells, activeIndex, allowed
  */
 const parseNB = (
-  notebook: any,
+  notebook: Notebook,
   cell: CodeCell | undefined = undefined,
   activationFlag: string = '',
   deactivationFlag: string = ''
@@ -49,6 +50,7 @@ const parseNB = (
     return [[], -1, false]; // return an empty array and -1 for activeIndex to indicate no cells were parsed
   }
 
+  // @ts-expect-error cellsArray is protected; we will probably remove this soon anyway
   const allCells: ParsedCell[] = notebook.cellsArray.map(
     (cell: Cell, index: number): ParsedCell => parseCell(cell, index, notebook)
   );
@@ -83,6 +85,7 @@ function checkIfEnabled(
       const tags = cell.model.getMetadata('tags');
       if (tags && Array.isArray(tags) && tags.includes(activationFlag)) {
         allowed = true;
+        console.log('[Jupytutor]: Activation flag found in cell tags.');
         break;
       }
     }
@@ -122,6 +125,11 @@ function parseCell(cell: Cell, index: number, notebook: any): ParsedCell {
     true,
     index > 0 ? notebook.cellsArray[index - 1] : undefined
   );
+  // TODO: parse cell data, not the node
+  // .node.innerHTML depends on markdown rendering, has a race condition
+
+  // console.log('parsing', cell);
+
   let cellObj: ParsedCell = {
     index,
     type,

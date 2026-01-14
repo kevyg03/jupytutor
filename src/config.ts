@@ -7,9 +7,9 @@
  */
 export const config = {
   api: {
-    // baseURL: 'http://localhost:3000/'
-    baseURL:
-      'https://server-jupytutor-cmeghve8dyf3agde.westus-01.azurewebsites.net/'
+    baseURL: 'http://localhost:3000/'
+    /*baseURL:
+      'https://server-jupytutor-cmeghve8dyf3agde.westus-01.azurewebsites.net/'*/
   },
   usage: {
     show_on_success: true, // For asking questions, not effective if context_gathering is disabled
