@@ -99,11 +99,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
         const parsedMetadata =
           JupytutorNotebookMetadataSchema.parse(jupytutorMetadata);
 
-          // TODO: listen for changes
+        // TODO: listen for changes
         pluginEnabled = parsedMetadata.enabled;
-
-        // Parse the notebook to get all cells and their links
-        const [allCells, _] = parseNB(notebook, undefined);
 
         // Skip context gathering if activation flag criteria not met
         if (!pluginEnabled) {
@@ -115,10 +112,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
           return;
         }
 
+        // Parse the notebook to get all cells and their links
+        const [allCells, _] = parseNB(notebook, undefined);
+
         if (DEMO_PRINTS) {
           console.log(
-            '[Jupytutor]: Gathered all cells from notebook on initial load.'
-            // allCells
+            '[Jupytutor]: Gathered all cells from notebook on initial load.',
+            allCells
           );
         }
 

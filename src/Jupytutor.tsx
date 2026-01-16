@@ -128,7 +128,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
         role: 'system' as const,
         content: [
           {
-            text: cell.text?.length ? cell.text : (cell.html ?? ''),
+            text: cell.text ?? '',
             type: 'input_text'
           }
         ],
@@ -158,28 +158,27 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
       i--
     ) {
       const cell = cells[i];
-      if (cell.images.length > 0 && cell.type === 'code') {
-        images.push(...cell.images);
+      if (cell.imageSources.length > 0 && cell.type === 'code') {
+        images.push(...cell.imageSources);
       }
-      if (cell.images.length > 0 && cell.type !== 'code') {
-        images.push(...cell.images);
+      if (cell.imageSources.length > 0 && cell.type !== 'code') {
+        images.push(...cell.imageSources);
         break;
       }
     }
     return images.slice(0, maxImages);
   };
 
-  const gatherContext = async () => {
+  const gatherLocalContext = async () => {
+    const activeCell = props.allCells[props.activeIndex];
     const filteredCells = props.allCells.filter(
       cell =>
-        cell.images.length > 0 ||
+        cell.imageSources.length > 0 ||
         cell.text !== '' ||
         cell.text != null ||
         cell.outputText != null
     );
-    const newActiveIndex = filteredCells.findIndex(
-      cell => cell.index === props.activeIndex
-    );
+    const newActiveIndex = filteredCells.findIndex(cell => cell === activeCell);
     let contextCells;
     switch (props.localContextScope) {
       case 'whole':
@@ -343,7 +342,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
     try {
       // Only gather context once on the first query
       if (!hasGatheredInitialContext.current) {
-        initialContextData.current = await gatherContext();
+        initialContextData.current = await gatherLocalContext();
       }
 
       // For the first query, include initial notebook context

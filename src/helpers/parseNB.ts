@@ -1,6 +1,10 @@
+import { CodeCell, ICellModel } from '@jupyterlab/cells';
 import { Notebook } from '@jupyterlab/notebook';
-import getCellType, { ParsedCellType } from './getCellType';
-import { Cell, CodeCell, CodeCellModel } from '@jupyterlab/cells';
+import { ParsedCellType } from './getCellType';
+
+import remarkParse from 'remark-parse';
+import { unified } from 'unified';
+import { extractLinksAndImages } from './markdown/extract-links-images';
 
 /**
  * For each cell, should get the Type and return any relevant information whether its:
@@ -19,13 +23,12 @@ import { Cell, CodeCell, CodeCellModel } from '@jupyterlab/cells';
  */
 
 export interface ParsedCell {
-  index: number;
   type: ParsedCellType | null;
-  html: string;
   text: string;
   outputText: string | null;
-  outputHtml: string | null;
-  images: string[];
+  // todo: reintroduce outputHtml, if this is handy
+  // TODO: redo imageSources
+  imageSources: string[]; // these aren't actually the image content -- you should fetch those asynchronously if you want them
   links: string[];
 }
 
@@ -45,33 +48,22 @@ const parseNB = (
 
   const cells = notebook.model?.cells ?? [];
 
-  for (const cell of cells) {
-    console.log(cell, cell.id, cell.type);
-    console.log(cell.sharedModel.getSource());
+  const parsedCells: ParsedCell[] = [];
 
-    if (cell.type === 'code') {
-      console.log('IS CODE');
-      const codeCell = cell as CodeCellModel;
-      console.log('OUTPUTS LENGTH', codeCell.outputs.length);
-      for (let i = 0; i < codeCell.outputs.length; i++) {
-        console.log('OUTPUT', i);
-        const output = codeCell.outputs.get(i);
-        console.log(output);
-      }
-    }
+  for (const cell of cells) {
+    parsedCells.push(parseCellModel(cell));
   }
 
-  // @ts-expect-error cellsArray is protected; we will probably remove this soon anyway
-  const allCells: ParsedCell[] = notebook.cellsArray.map(
-    (cell: Cell, index: number): ParsedCell =>
-      parseRenderedCell(cell, index, notebook)
-  );
+  // const allCells: ParsedCell[] = notebook.cellsArray.map(
+  //   (cell: Cell, index: number): ParsedCell =>
+  //     parseRenderedCell(cell, index, notebook)
+  // );
 
   // cross-reference provided cell to adjust activeIndex, tends to be one ahead when cell is run
   // but we don't want this to break if someone runs the cell manually / has different settings
   if (cell != undefined && activeIndex !== 0) {
     if (
-      allCells[activeIndex - 1].outputText ===
+      parsedCells[activeIndex - 1].outputText ===
       cell.outputArea.layout.widgets[0].node.innerText
     ) {
       activeIndex -= 1;
@@ -82,8 +74,58 @@ const parseNB = (
     }
   }
 
-  return [allCells, activeIndex];
+  return [parsedCells, activeIndex];
 };
+
+/**
+ * For now, we've removed the ability to parse FRQ answer fields -- I think this goes best in the authoring
+ * step (as it already is in data8, with 'otter-answer-cell' as a tag)
+ * @param cell - The cell to parse
+ */
+function parseCellModel(cell: ICellModel): ParsedCell {
+  console.log(cell, cell.id, cell.type);
+  console.log(cell.sharedModel.getSource());
+
+  // if (cell.type === 'code') {
+  //   console.log('IS CODE');
+  //   const codeCell = cell as CodeCellModel;
+  //   console.log('OUTPUTS LENGTH', codeCell.outputs.length);
+  //   for (let i = 0; i < codeCell.outputs.length; i++) {
+  //     console.log('OUTPUT', i);
+  //     const output = codeCell.outputs.get(i);
+  //     console.log(output);
+  //   }
+  // }
+
+  const type: ParsedCellType = 'text';
+  const text = cell.sharedModel.getSource();
+  const parsedMarkdown = parseCellMarkdown(text);
+  return {
+    type,
+    text,
+    outputText: null, // TODO
+    links: parsedMarkdown.links,
+    imageSources: parsedMarkdown.imageSources
+  };
+}
+
+function parseCellMarkdown(text: string): {
+  links: string[];
+  imageSources: string[];
+} {
+  const markdownTree = unified().use(remarkParse).parse(text);
+  const markdownLinksImages = extractLinksAndImages(markdownTree);
+  return {
+    links: markdownLinksImages
+      .filter(link => link.kind === 'link')
+      .map(link => link.url)
+      .filter(url => url !== undefined) as string[],
+    imageSources: markdownLinksImages
+      .filter(link => link.kind === 'image')
+      .map(link => link.url)
+      .filter(url => url !== undefined) as string[]
+  };
+}
 
 /**
  * Also involves the previous cell to get the type of the current cell for checking free response.
@@ -99,154 +141,154 @@ const parseNB = (
  *
  * @returns the parsed cell
  */
-function parseRenderedCell(
-  cell: Cell,
-  index: number,
-  notebook: any
-): ParsedCell {
-  const type = getCellType(
-    cell,
-    true,
-    index > 0 ? notebook.cellsArray[index - 1] : undefined
-  );
-  // TODO: parse cell data, not the node
-  // .node.innerHTML depends on markdown rendering, has a race condition
+// function parseRenderedCell(
+//   cell: Cell,
+//   index: number,
+//   notebook: any
+// ): ParsedCell {
+//   const type = getCellType(
+//     cell,
+//     true,
+//     index > 0 ? notebook.cellsArray[index - 1] : undefined
+//   );
+//   // TODO: parse cell data, not the node
+//   // .node.innerHTML depends on markdown rendering, has a race condition
 
-  // console.log('parsing', cell);
+//   // console.log('parsing', cell);
 
-  let cellObj: ParsedCell = {
-    index,
-    type,
-    html: cell.node.innerHTML,
-    text: cell.node.innerText,
-    outputText: null,
-    outputHtml: null,
-    images: findImageSources(cell.node.innerHTML),
-    links: findHyperlinks(cell.node.innerHTML)
-  };
-  if (
-    type === 'grader' ||
-    type === 'code' ||
-    type === 'error' ||
-    type === 'success'
-  ) {
-    const codeCell = cell as CodeCell;
-    if (codeCell.outputArea.layout.widgets?.length > 0) {
-      cellObj.outputText = codeCell.outputArea.layout.widgets[0].node.innerText;
-      cellObj.text = removeOutputTextFromInputText(
-        cellObj.text,
-        cellObj.outputText ?? ''
-      );
-      cellObj.outputHtml = codeCell.outputArea.layout.widgets[0].node.innerHTML;
-      cellObj.html = removeOutputTextFromInputText(
-        cellObj.html,
-        cellObj.outputHtml ?? ''
-      );
-      cellObj.images = [
-        ...cellObj.images,
-        ...findImageSources(
-          codeCell.outputArea.layout.widgets[0].node.innerHTML
-        )
-      ];
-    }
-  }
-  return cellObj;
-}
+//   let cellObj: ParsedCell = {
+//     // index,
+//     type,
+//     // html: cell.node.innerHTML,
+//     text: cell.node.innerText,
+//     outputText: null,
+//     // outputHtml: null,
+//     imageSources: findImageSources(cell.node.innerHTML),
+//     links: findHyperlinks(cell.node.innerHTML)
+//   };
+//   if (
+//     type === 'grader' ||
+//     type === 'code' ||
+//     type === 'error' ||
+//     type === 'success'
+//   ) {
+//     const codeCell = cell as CodeCell;
+//     if (codeCell.outputArea.layout.widgets?.length > 0) {
+//       cellObj.outputText = codeCell.outputArea.layout.widgets[0].node.innerText;
+//       cellObj.text = removeOutputTextFromInputText(
+//         cellObj.text,
+//         cellObj.outputText ?? ''
+//       );
+//       // cellObj.outputHtml = codeCell.outputArea.layout.widgets[0].node.innerHTML;
+//       // cellObj.html = removeOutputTextFromInputText(
+//       //   cellObj.html,
+//       //   cellObj.outputHtml ?? ''
+//       // );
+//       cellObj.imageSources = [
+//         ...cellObj.imageSources,
+//         ...findImageSources(
+//           codeCell.outputArea.layout.widgets[0].node.innerHTML
+//         )
+//       ];
+//     }
+//   }
+//   return cellObj;
+// }
 
-function removeOutputTextFromInputText(
-  inputText: string,
-  outputText: string
-): string {
-  const lastIndex = inputText.lastIndexOf(outputText);
-  if (lastIndex === -1) {
-    return inputText;
-  }
-  return (
-    inputText.slice(0, lastIndex) +
-    inputText.slice(lastIndex + outputText.length)
-  );
-}
+// function removeOutputTextFromInputText(
+//   inputText: string,
+//   outputText: string
+// ): string {
+//   const lastIndex = inputText.lastIndexOf(outputText);
+//   if (lastIndex === -1) {
+//     return inputText;
+//   }
+//   return (
+//     inputText.slice(0, lastIndex) +
+//     inputText.slice(lastIndex + outputText.length)
+//   );
+// }
 
-/**
- * Handy function from Gemini to parse html and extract image sources with regex.
- *
- * @param htmlString
- * @returns
- */
-function findImageSources(htmlString: string): string[] {
-  // 1. src='URL' or src="URL" in <img> tags.
-  // 2. srcset='URL' or srcset="URL" in <source> tags.
-  // 3. url(URL) in inline styles or style blocks, excluding "clip-path" artifacts starting with #.
-  const regex =
-    /<img[^>]+src\s*=\s*["']([^"']+)["']|<source[^>]+srcset\s*=\s*["']([^"']+)["']|url\((['"]?)(?!#)(.*?)\3\)/gi;
+// /**
+//  * Handy function from Gemini to parse html and extract image sources with regex.
+//  *
+//  * @param htmlString
+//  * @returns
+//  */
+// function findImageSources(htmlString: string): string[] {
+//   // 1. src='URL' or src="URL" in <img> tags.
+//   // 2. srcset='URL' or srcset="URL" in <source> tags.
+//   // 3. url(URL) in inline styles or style blocks, excluding "clip-path" artifacts starting with #.
+//   const regex =
+//     /<img[^>]+src\s*=\s*["']([^"']+)["']|<source[^>]+srcset\s*=\s*["']([^"']+)["']|url\((['"]?)(?!#)(.*?)\3\)/gi;
 
-  const sources: Set<string> = new Set(); // Using a Set to automatically handle duplicates
-  let match;
+//   const sources: Set<string> = new Set(); // Using a Set to automatically handle duplicates
+//   let match;
 
-  // Loop through all matches in the HTML string
-  while ((match = regex.exec(htmlString)) !== null) {
-    // Check the captured groups for the URL.
-    // match[1] is for <img src="...">
-    // match[2] is for <source srcset="...">
-    // match[4] is for url(...)
-    const src = match[1] || match[2] || match[4];
-    if (src) {
-      sources.add(src.trim());
-    }
-  }
+//   // Loop through all matches in the HTML string
+//   while ((match = regex.exec(htmlString)) !== null) {
+//     // Check the captured groups for the URL.
+//     // match[1] is for <img src="...">
+//     // match[2] is for <source srcset="...">
+//     // match[4] is for url(...)
+//     const src = match[1] || match[2] || match[4];
+//     if (src) {
+//       sources.add(src.trim());
+//     }
+//   }
 
-  return Array.from(sources); // Convert the Set back to an array
-}
+//   return Array.from(sources); // Convert the Set back to an array
+// }
 
-/**
- * Finds hyperlink URLs in HTML content and converts them to absolute URLs.
- *
- * @param htmlString - The HTML string to search for links
- * @returns Array of absolute URLs found in the HTML
- */
-function findHyperlinks(htmlString: string): string[] {
-  // Regex to find href attributes in <a> tags
-  const regex = /<a[^>]+href\s*=\s*["']([^"']+)["']/gi;
+// /**
+//  * Finds hyperlink URLs in HTML content and converts them to absolute URLs.
+//  *
+//  * @param htmlString - The HTML string to search for links
+//  * @returns Array of absolute URLs found in the HTML
+//  */
+// function findHyperlinks(htmlString: string): string[] {
+//   // Regex to find href attributes in <a> tags
+//   const regex = /<a[^>]+href\s*=\s*["']([^"']+)["']/gi;
 
-  const links: Set<string> = new Set(); // Using a Set to automatically handle duplicates
-  let match;
+//   const links: Set<string> = new Set(); // Using a Set to automatically handle duplicates
+//   let match;
 
-  // Loop through all matches in the HTML string
-  while ((match = regex.exec(htmlString)) !== null) {
-    const href = match[1];
-    if (href) {
-      const trimmedHref = href.trim();
+//   // Loop through all matches in the HTML string
+//   while ((match = regex.exec(htmlString)) !== null) {
+//     const href = match[1];
+//     if (href) {
+//       const trimmedHref = href.trim();
 
-      // Skip empty links, javascript links, and mailto links
-      if (
-        trimmedHref === '' ||
-        trimmedHref.startsWith('javascript:') ||
-        trimmedHref.startsWith('mailto:') ||
-        trimmedHref.startsWith('#')
-      ) {
-        continue;
-      }
+//       // Skip empty links, javascript links, and mailto links
+//       if (
+//         trimmedHref === '' ||
+//         trimmedHref.startsWith('javascript:') ||
+//         trimmedHref.startsWith('mailto:') ||
+//         trimmedHref.startsWith('#')
+//       ) {
+//         continue;
+//       }
 
-      try {
-        // If it's already an absolute URL, use it as-is
-        if (
-          trimmedHref.startsWith('http://') ||
-          trimmedHref.startsWith('https://')
-        ) {
-          links.add(trimmedHref);
-        } else {
-          // Convert relative URLs to absolute URLs using a base URL
-          const url = new URL(trimmedHref, 'https://example.com');
-          links.add(url.href);
-        }
-      } catch (error) {
-        // If URL construction fails, add the original href as-is
-        links.add(trimmedHref);
-      }
-    }
-  }
+//       try {
+//         // If it's already an absolute URL, use it as-is
+//         if (
+//           trimmedHref.startsWith('http://') ||
+//           trimmedHref.startsWith('https://')
+//         ) {
+//           links.add(trimmedHref);
+//         } else {
+//           // Convert relative URLs to absolute URLs using a base URL
+//           const url = new URL(trimmedHref, 'https://example.com');
+//           links.add(url.href);
+//         }
+//       } catch (error) {
+//         // If URL construction fails, add the original href as-is
+//         links.add(trimmedHref);
+//       }
+//     }
+//   }
 
-  return Array.from(links); // Convert the Set back to an array
-}
+//   return Array.from(links); // Convert the Set back to an array
+// }
 
 export default parseNB;
