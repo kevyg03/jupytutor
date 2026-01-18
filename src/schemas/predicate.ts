@@ -5,8 +5,10 @@ const StringPredicateSchema = z.union([
     is: z.string()
   }),
   z.object({
-    matchesRegex: z.string(),
-    regexFlags: z.string().default('')
+    matchesRegex: z.object({
+      pattern: z.string(),
+      flags: z.string().default('')
+    })
   }),
   z.string()
 ]);
@@ -69,22 +71,13 @@ export const PredicateSchema = z.union([
       return PredicateSchema;
     }
   }),
+  z.object({
+    get nearbyCell() {
+      return z.object({
+        relativePosition: z.number().int(),
+        matches: PredicateSchema
+      });
+    }
+  }),
   PredicateSubSchema
 ]);
-
-const testPredicate: z.output<typeof PredicateSchema> = {
-  cellType: 'code'
-};
-
-const testPredicate2: z.output<typeof PredicateSchema> = {
-  AND: [
-    {
-      cellType: 'markdown'
-    },
-    {
-      tags: {
-        any: 'otter-answer-cell'
-      }
-    }
-  ]
-};

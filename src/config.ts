@@ -1,3 +1,6 @@
+import z from 'zod';
+import { ConfigSchema } from './schemas/config';
+
 /**
  * THIS IS THE DEFAULT CONFIGURATION FOR THE EXTENSION.
  *
@@ -5,19 +8,14 @@
  *
  * Structure ~/.config/jupytutor/config.json the same as the exported config object.
  */
-export const config = {
+export const defaultConfig: z.output<typeof ConfigSchema> = {
+  pluginEnabled: true,
   api: {
     baseURL: 'http://localhost:3000/'
     /*baseURL:
       'https://server-jupytutor-cmeghve8dyf3agde.westus-01.azurewebsites.net/'*/
   },
-  usage: {
-    show_on_success: true, // For asking questions, not effective if context_gathering is disabled
-    show_on_free_response: true, // For asking questions, not effective if context_gathering is disabled
-    automatic_first_query_on_error: false,
-    use_streaming: true // Stream in the text responses instead of sending the entire response at once
-  },
-  context_gathering: {
+  remoteContextGathering: {
     enabled: true, // Otherwise, just sends the notebook context
     // If not null, whitelist overrides the blacklist
     whitelist: ['inferentialthinking.com'],
@@ -26,19 +24,149 @@ export const config = {
     // Special support for JupyterBook textbooks
     jupyterbook: {
       // This link should be a JupyterBook site, which enables link expansion to retrieve entire chapters and subsections
-      url: 'inferentialthinking.com',
-      link_expansion: true // If true, will expand JupyterBook links to retrieve entire chapters and subsections
+      urls: ['inferentialthinking.com'],
+      linkExpansion: true // If true, will expand JupyterBook links to retrieve entire chapters and subsections
     }
   },
-  keywords: {
-    // This is tested on the current cell and the one immediately before it. The current cell must be unlocked.
-    free_response_regex:
-      /.*question\s+\d+(?:\.\d+)*\.?\s*.*(?:\(?\d+\s+points\)?)?.*/i,
-    // This is tested on the output of the current code cell (autograder output).
-    success_regex: /.* passed!.*/i
-  },
-  deactivation_flag: 'jupytutor: false', // IF IT IS NOT "" AND APPEARS IN ANY CODE CELL, THE PLUGIN WILL BE DEACTIVATED
-  instructor_note: '' // NOT IMPLEMENTED YET
+
+  rules: [
+    {
+      config: {
+        chatEnabled: false
+      }
+    },
+    {
+      when: {
+        AND: [
+          {
+            cellType: 'code'
+          },
+          {
+            hasError: true
+          }
+        ]
+      },
+      config: {
+        chatEnabled: true,
+        chatProactive: true,
+        quickResponses: ['Explain this error.']
+      }
+    },
+    {
+      _comment:
+        'Code cell (likely a grader cell) following an answer cell with all tests passing',
+      when: {
+        AND: [
+          {
+            cellType: 'code'
+          },
+          {
+            OR: [
+              {
+                nearbyCell: {
+                  relativePosition: -1,
+                  matches: {
+                    tags: {
+                      any: 'otter_answer_cell'
+                    }
+                  }
+                }
+              },
+              {
+                tags: {
+                  any: 'jupytutor_grader_cell'
+                }
+              }
+            ]
+          },
+          {
+            output: {
+              matchesRegex: {
+                pattern: '.*passed!.*',
+                flags: 'i'
+              }
+            }
+          }
+        ]
+      },
+      config: {
+        chatEnabled: true,
+        chatProactive: true,
+        quickResponses: [
+          "I still don't feel confident in my answer.",
+          'Provide me three important review materials.',
+          'Can I make further improvements?'
+        ]
+      }
+    },
+    {
+      _comment:
+        'Code cell (likely a grader cell) following an answer cell without all tests passing',
+      when: {
+        AND: [
+          {
+            cellType: 'code'
+          },
+          {
+            OR: [
+              {
+                nearbyCell: {
+                  relativePosition: -1,
+                  matches: {
+                    tags: {
+                      any: 'otter_answer_cell'
+                    }
+                  }
+                }
+              },
+              {
+                tags: {
+                  any: 'jupytutor_grader_cell'
+                }
+              }
+            ]
+          },
+          {
+            output: {
+              matchesRegex: {
+                pattern: '.*Test case failed.*',
+                flags: 'i'
+              }
+            }
+          }
+        ]
+      },
+      config: {
+        chatEnabled: true,
+        chatProactive: true,
+        quickResponses: [
+          'Explain this error.',
+          'Provide a concise list of important review materials.',
+          'What progress have I made so far?'
+        ]
+      }
+    },
+    {
+      _comment: 'Markdown answer cell',
+      when: {
+        AND: [
+          {
+            cellType: 'markdown'
+          },
+          {
+            tags: {
+              any: 'otter_answer_cell'
+            }
+          }
+        ]
+      },
+      config: {
+        chatEnabled: true,
+        chatProactive: true,
+        quickResponses: ['Evaluate my answer.']
+      }
+    }
+  ]
 };
 
-export default config;
+export default defaultConfig;

@@ -6,7 +6,7 @@ import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 import { extractLinksAndImages } from './markdown/extract-links-images';
 
-type ParsedCellType = 'code' | 'markdown' | 'unknown';
+export type ParsedCellType = 'code' | 'markdown' | 'unknown';
 
 /**
  * For each cell, should get the Type and return any relevant information whether its:
@@ -58,18 +58,18 @@ const parseNB = (
 
   // cross-reference provided cell to adjust activeIndex, tends to be one ahead when cell is run
   // but we don't want this to break if someone runs the cell manually / has different settings
-  if (cell != undefined && activeIndex !== 0) {
-    if (
-      parsedCells[activeIndex - 1].outputs[0]?.data.toString() ===
-      cell.outputArea.layout.widgets[0].node.innerText
-    ) {
-      activeIndex -= 1;
-      console.log(
-        '[Jupytutor]: ACTIVE INDEX CORRECTION PERFORMED TO',
-        activeIndex
-      );
-    }
-  }
+  // if (cell != undefined && activeIndex !== 0) {
+  //   if (
+  //     parsedCells[activeIndex - 1].outputs[0]?.data.toString() ===
+  //     cell.outputArea.layout.widgets[0].node.innerText
+  //   ) {
+  //     activeIndex -= 1;
+  //     console.log(
+  //       '[Jupytutor]: ACTIVE INDEX CORRECTION PERFORMED TO',
+  //       activeIndex
+  //     );
+  //   }
+  // }
 
   return [parsedCells, activeIndex];
 };
@@ -83,16 +83,16 @@ function parseCellModel(cell: ICellModel): ParsedCell {
   // console.log(cell, cell.id, cell.type);
   // console.log(cell.sharedModel.getSource());
 
-  if (cell.type === 'code') {
-    console.log('IS CODE');
-    const codeCell = cell as CodeCellModel;
-    console.log('OUTPUTS LENGTH', codeCell.outputs.length);
-    for (let i = 0; i < codeCell.outputs.length; i++) {
-      console.log('OUTPUT', i);
-      const output = codeCell.outputs.get(i);
-      console.log(output);
-    }
-  }
+  // if (cell.type === 'code') {
+  //   console.log('IS CODE');
+  //   const codeCell = cell as CodeCellModel;
+  //   console.log('OUTPUTS LENGTH', codeCell.outputs.length);
+  //   for (let i = 0; i < codeCell.outputs.length; i++) {
+  //     console.log('OUTPUT', i);
+  //     const output = codeCell.outputs.get(i);
+  //     console.log(output);
+  //   }
+  // }
 
   const type: ParsedCellType =
     cell.type === 'markdown'

@@ -1,10 +1,11 @@
 import { DEMO_PRINTS } from '../..';
-import { ParsedCell } from '../parseNB';
+import { PluginConfig } from '../../schemas/config';
+import type { ParsedCell } from '../parseNB';
 import NotebookContextRetrieval from './notebookContextRetrieval';
 
 export const parseContextFromNotebook = async (
   notebook: ParsedCell[],
-  pluginConfig: any
+  pluginConfig: PluginConfig
 ) => {
   console.log('nb parseContextFromNotebook', notebook);
 
@@ -30,11 +31,11 @@ export const parseContextFromNotebook = async (
   // Create ContextRetrieval instance with the gathered links
   return new NotebookContextRetrieval({
     sourceLinks: uniqueLinks,
-    whitelistedURLs: pluginConfig.context_gathering.whitelist, // whitelisted URLs
-    blacklistedURLs: pluginConfig.context_gathering.blacklist, // blacklisted URLs
-    jupyterbookURL: pluginConfig.context_gathering.jupyterbook.url, // jupyterbook URL
+    whitelistedURLs: pluginConfig.remoteContextGathering.whitelist, // whitelisted URLs
+    blacklistedURLs: pluginConfig.remoteContextGathering.blacklist, // blacklisted URLs
+    jupyterbookURLs: pluginConfig.remoteContextGathering.jupyterbook.urls, // jupyterbook URL
     attemptJupyterbookLinkExpansion:
-      pluginConfig.context_gathering.jupyterbook.link_expansion, // attempt JupyterBook link expansion
+      pluginConfig.remoteContextGathering.jupyterbook.linkExpansion, // attempt JupyterBook link expansion
     debug: false // debug mode
   });
 };

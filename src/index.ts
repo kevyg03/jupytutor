@@ -9,33 +9,22 @@ import {
   NotebookActions
 } from '@jupyterlab/notebook';
 import { ServerConnection } from '@jupyterlab/services';
-import { Widget } from '@lumino/widgets';
 import JupytutorWidget from './Jupytutor';
-import config from './config';
+import defaultConfig from './config';
 import { parseContextFromNotebook } from './helpers/context/notebookContextParsing';
 import NotebookContextRetrieval, {
   STARTING_TEXTBOOK_CONTEXT
 } from './helpers/context/notebookContextRetrieval';
-import getCellType, { ParsedCellType } from './helpers/getCellType';
+import { applyConfigRules } from './helpers/config-rules';
 import parseNB from './helpers/parseNB';
 import { JupytutorNotebookMetadataSchema } from './schemas/notebook-metadata';
-
-// Destructure the configuration
-// const {
-//   usage: { show_on_success, run_automatically },
-//   context_gathering: {
-//     enabled: contextGatheringEnabled,
-//     whitelist,
-//     blacklist,
-//     jupyterbook: { url: jupyterbookUrl, link_expansion: linkExpansion }
-//   }
-// } = config;
+import { ConfigSchema } from './schemas/config';
 
 export const DEMO_PRINTS = true;
 
-const assertNever = (x: never) => {
-  throw new Error(`Unexpected value: ${x}`);
-};
+// const assertNever = (x: never) => {
+//   throw new Error(`Unexpected value: ${x}`);
+// };
 
 /**
  * Helper function to extract the user identifier from DataHub-style URLs
@@ -67,7 +56,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
       );
     }
 
-    const SEND_TEXTBOOK_WITH_REQUEST = finalConfig.context_gathering.enabled;
+    const SEND_TEXTBOOK_WITH_REQUEST =
+      finalConfig.remoteContextGathering.enabled;
 
     // Get the DataHub user identifier
     const userId = getUserIdentifier();
@@ -88,9 +78,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
         await currentWidget.context.ready;
         await currentWidget.revealed;
-
-        // ok still need this, .ready aint good enough
-        await new Promise(resolve => setTimeout(resolve, 500));
 
         const notebook = currentWidget.content;
 
@@ -164,124 +151,100 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
     // Listen for the execution of a cell. [1, 3, 6]
     NotebookActions.executed.connect(
-      (_, args: { notebook: Notebook; cell: Cell; success: boolean }) => {
-        if (!pluginEnabled) {
+      (
+        _,
+        {
+          notebook,
+          cell,
+          success
+        }: { notebook: Notebook; cell: Cell; success: boolean }
+      ) => {
+        const notebookModel = notebook.model;
+        if (!notebookModel) {
+          console.warn(
+            '[Jupytutor]: No notebook model found during cell execution.'
+          );
+          return;
+        }
+
+        const rawConfig = notebookModel.getMetadata('jupytutor') ?? {};
+        const notebookConfig = ConfigSchema.parse(rawConfig);
+
+        console.log({ notebookConfig });
+
+        if (!notebookConfig.pluginEnabled) {
           // NEVER DO ANYTHING IF THE ACTIVATION FLAG IS NOT MET, NO MATTER WHAT
           return;
         }
-        const { cell, success, notebook } = args;
 
-        const cellType = getCellType(cell, success);
+        const cellIndex = [...notebookModel.cells].findIndex(
+          c => c === cell.model
+        );
+        console.log({ notebookModel, cellIndex, rules: notebookConfig.rules });
+        const cellConfig = applyConfigRules(
+          notebookModel,
+          cellIndex,
+          notebookConfig.rules
+        );
+        console.log({ cellConfig });
 
-        if (cellType === 'grader_not_initialized') {
-          const codeCell = cell as CodeCell;
-
-          // Create a new widget to hold our UI element.
-          const error = new Widget();
-          error.node.innerHTML = `<h4>Did not find autograder. Make sure you have run the cells to initialize it!</h4>`;
-
-          // Add the new UI element to the cell's output area. [15]
-          if (codeCell.outputArea && codeCell.outputArea.layout) {
-            (codeCell.outputArea.layout as any).addWidget(error);
-          }
-        } else if (cellType === 'grader' || cellType === 'success') {
-          if (cellType === 'success' && !finalConfig.usage.show_on_success) {
-            return;
-          }
-
+        if (cellConfig.chatEnabled && cellConfig.chatProactive) {
           const codeCell = cell as CodeCell;
 
           // activeIndex is guaranteed to be the cell just run within parseNB by cross-referencing cell
           const [allCells, activeIndex] = parseNB(notebook, codeCell);
 
           if (codeCell.outputArea && codeCell.outputArea.layout) {
-            const autograderResponse =
-              codeCell.outputArea.layout.widgets[0].node.innerText;
+            // const autograderResponse =
+            //   codeCell.outputArea.layout.widgets[0].node.innerText;
 
             const jupytutor = new JupytutorWidget({
-              autograderResponse,
+              autograderResponse: '',
               allCells,
               activeIndex,
               localContextScope: 'upToGrader',
               sendTextbookWithRequest: SEND_TEXTBOOK_WITH_REQUEST,
               notebookContextRetriever,
-              cellType,
+              cellType: 'code',
               userId,
-              config: finalConfig
+              baseURL: finalConfig.api.baseURL,
+              instructorNote: cellConfig.instructorNote,
+              quickResponses: cellConfig.quickResponses
             });
 
             (codeCell.outputArea.layout as any).addWidget(jupytutor);
           }
-        } else if (cellType == 'free_response') {
-          if (!finalConfig.usage.show_on_free_response) {
-            return;
-          }
-          // For markdown cells, create a proper ReactWidget mounting
-          const [allCells, activeIndex] = parseNB(notebook, undefined);
-
-          const cellType: ParsedCellType | null = allCells[activeIndex].type;
-
-          if (cellType === 'free_response') {
-            // Create the Jupytutor widget
-            const jupytutor = new JupytutorWidget({
-              autograderResponse: '', // No autograder response for free response cells
-              allCells,
-              activeIndex,
-              localContextScope: 'upToGrader',
-              sendTextbookWithRequest: SEND_TEXTBOOK_WITH_REQUEST,
-              notebookContextRetriever,
-              cellType,
-              userId,
-              config: finalConfig
-            });
-
-            // Check if there's already a JupyTutor widget in this cell and remove it
-            const existingContainer = cell.node.querySelector(
-              '.jp-jupytutor-markdown-container'
-            );
-            if (existingContainer) {
-              existingContainer.remove();
-            }
-
-            // Create a proper container div with React mounting point
-            const container = document.createElement('div');
-            container.className = 'jp-jupytutor-markdown-container';
-            container.style.cssText = `
-            margin-top: 15px;
-            border: 1px solid #e0e0e0;
-            border-radius: 6px;
-            padding: 0;
-            background-color: #ffffff;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-          `;
-
-            // Mount the ReactWidget properly
-            container.appendChild(jupytutor.node);
-
-            // Add to the cell
-            cell.node.appendChild(container);
-
-            // Ensure React renders by calling update after DOM insertion
-            requestAnimationFrame(() => {
-              jupytutor.update();
-            });
-          }
-        } else if (
-          cellType === 'code' ||
-          cellType === 'error' ||
-          cellType === 'text' ||
-          cellType === null
-        ) {
-        } else {
-          assertNever(cellType);
         }
+        // TODO -- different mount point depending on whether this is a markdown cell or a code cell (w/ output area)
+        //   // Create a proper container div with React mounting point
+        //   const container = document.createElement('div');
+        //   container.className = 'jp-jupytutor-markdown-container';
+        //   container.style.cssText = `
+        //   margin-top: 15px;
+        //   border: 1px solid #e0e0e0;
+        //   border-radius: 6px;
+        //   padding: 0;
+        //   background-color: #ffffff;
+        //   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        // `;
+
+        //   // Mount the ReactWidget properly
+        //   container.appendChild(jupytutor.node);
+
+        //   // Add to the cell
+        //   cell.node.appendChild(container);
+
+        //   // Ensure React renders by calling update after DOM insertion
+        //   requestAnimationFrame(() => {
+        //     jupytutor.update();
+        //   });
       }
     );
   }
 };
 
 const loadConfiguration = async () => {
-  let finalConfig = { ...config };
+  let finalConfig = { ...defaultConfig };
   try {
     const settings = ServerConnection.makeSettings();
     const response = await ServerConnection.makeRequest(

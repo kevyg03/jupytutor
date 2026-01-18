@@ -22,6 +22,7 @@
             pkgs.yarn
             pkgs.git
             pkgs.screen
+            pkgs.ncurses
             pkgs.stdenv.cc.cc.lib
             pkgs.zlib
           ];
@@ -30,6 +31,8 @@
             PYTHONNOUSERSITE = "1";
           };
           shellHook = ''
+            export SHELL=${pkgs.bashInteractive}/bin/bash
+            export TERMINFO_DIRS="${pkgs.ncurses}/share/terminfo''${TERMINFO_DIRS:+:$TERMINFO_DIRS}"
             export LD_LIBRARY_PATH="${pkgs.stdenv.cc.cc.lib}/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
             if [ ! -d .venv ]; then
               echo "Creating .venv (first run)"

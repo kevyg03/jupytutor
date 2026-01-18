@@ -11,9 +11,9 @@ export const STARTING_TEXTBOOK_CONTEXT: string =
  */
 export interface ContextRetrievalConfig {
   sourceLinks?: string[];
-  whitelistedURLs?: string[];
+  whitelistedURLs?: string[] | null;
   blacklistedURLs?: string[];
-  jupyterbookURL?: string;
+  jupyterbookURLs?: string[];
   attemptJupyterbookLinkExpansion?: boolean;
   debug?: boolean;
 }
@@ -46,24 +46,24 @@ class NotebookContextRetrieval {
   // TODO: WHITELIST
   constructor({
     sourceLinks = [],
-    whitelistedURLs = [],
+    whitelistedURLs = null,
     blacklistedURLs = [
       'data8.org', // Includes references, policies, schedule, etc.
       'berkeley.edu', // Includes map, etc.
       'gradescope.com'
     ],
-    jupyterbookURL = 'inferentialthinking.com',
+    jupyterbookURLs = [],
     attemptJupyterbookLinkExpansion = false,
     debug = false
   }: ContextRetrievalConfig = {}) {
     this._context = null;
     this._sourceLinks = sourceLinks;
     this._blacklistedURLs = blacklistedURLs;
-    this._whitelistedURLs = whitelistedURLs;
+    this._whitelistedURLs = whitelistedURLs ?? [];
     this._loadedPromise = (async () => {
       if (!debug) {
         if (attemptJupyterbookLinkExpansion) {
-          await this._expandJupyterBookLinksAsync(jupyterbookURL);
+          await this._expandJupyterBookLinksAsync(jupyterbookURLs ?? []);
         }
 
         this.scrapeSourceLinks();
@@ -139,12 +139,12 @@ class NotebookContextRetrieval {
    * @param jupyterbookURL - the base domain for the JupyterBook
    */
   private async _expandJupyterBookLinksAsync(
-    jupyterbookURL: string
+    jupyterbookURLs: string[]
   ): Promise<void> {
     try {
       this._sourceLinks = await this.expandJupyterBookLinks(
         this._sourceLinks,
-        jupyterbookURL
+        jupyterbookURLs
       );
     } catch (error) {
       console.warn('Failed to expand JupyterBook links:', error);
@@ -159,17 +159,23 @@ class NotebookContextRetrieval {
    */
   private async expandJupyterBookLinks(
     sourceLinks: string[],
-    jupyterbookURL: string
+    jupyterbookURLs: string[]
   ): Promise<string[]> {
     // Find URLs that belong to the JupyterBook domain
     const jupyterBookUrls = sourceLinks.filter(url =>
-      url.includes(jupyterbookURL)
+      jupyterbookURLs.some(jupyterbookURL => url.includes(jupyterbookURL))
     );
 
     // For each JupyterBook URL, find all internal links
     const linkPromises = jupyterBookUrls.map(async url => {
       try {
-        return await this.findJupyterBookLinks(url, jupyterbookURL);
+        const jupyterbookURL = jupyterbookURLs.find(jupyterbookURL =>
+          url.includes(jupyterbookURL)
+        );
+        if (jupyterbookURL) {
+          return await this.findJupyterBookLinks(url, jupyterbookURL);
+        }
+        return [];
       } catch (error) {
         console.warn(`Failed to expand links for ${url}:`, error);
         return [];
@@ -187,7 +193,11 @@ class NotebookContextRetrieval {
     for (let i = 0; i < sourceLinks.length; i++) {
       const originalLink = sourceLinks[i];
 
-      if (originalLink.includes(jupyterbookURL)) {
+      if (
+        jupyterbookURLs.some(jupyterbookURL =>
+          originalLink.includes(jupyterbookURL)
+        )
+      ) {
         // This is a JupyterBook link - add it and its expansions
         const normalizedOriginalLink = this.normalizeUrl(originalLink);
         if (!seenUrls.has(normalizedOriginalLink)) {
