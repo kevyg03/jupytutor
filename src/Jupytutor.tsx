@@ -36,8 +36,32 @@ interface ChatHistoryItem {
   noShow?: boolean;
 }
 
-const getOutputText = (cell: ParsedCell): string => {
-  return cell.outputs.map(output => JSON.stringify(output)).join('\n');
+const getCodeCellOutputAsLLMContent = (
+  cell: ParsedCell
+): { type: 'input_text'; text: string }[] => {
+  return cell.outputs.map(output => {
+    if ('image/png' in output.data) {
+      return {
+        type: 'input_text',
+        // TODO: include in the chat prompt
+        text: '[Image output]'
+      };
+    }
+    if ('text/html' in output.data) {
+      return {
+        type: 'input_text',
+        text: output.data['text/html']?.toString() ?? ''
+      };
+    }
+    if ('text/plain' in output.data) {
+      return {
+        type: 'input_text',
+        text: output.data['text/plain']?.toString() ?? ''
+      };
+    }
+    // TODO: make sure this is getting trimmed somewhere
+    return { type: 'input_text', text: JSON.stringify(output.data) };
+  });
 };
 
 export const Jupytutor = (props: JupytutorProps): JSX.Element => {
@@ -96,20 +120,18 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
     }
 
     const notebookContext: ChatHistoryItem[] = cells.map(cell => {
-      const hasOutput =
-        getOutputText(cell) !== '' && getOutputText(cell) != null;
+      const output = getCodeCellOutputAsLLMContent(cell);
+      const hasOutput = output.length > 0;
       if (hasOutput && cell.type === 'code') {
         return {
           role: 'system' as const,
           content: [
             {
               text:
-                // 'The student (user role) is provided a coding skeleton and has submitted the following code:\n' +
-                cell.text +
-                '\nThe above code produced the following output:\n' +
-                getOutputText(cell),
+                cell.text + '\nThe above code produced the following output:\n',
               type: 'input_text'
-            }
+            },
+            ...output
           ],
           noShow: true
         };
