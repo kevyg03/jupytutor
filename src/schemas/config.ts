@@ -48,7 +48,31 @@ export const ConfigSchema = z.object({
         config: RuleConfigOverrideSchema.partial()
       })
     )
-    .default([])
+    .default([
+      {
+        config: {
+          chatEnabled: true,
+          chatProactive: false
+        }
+      },
+      {
+        "when": {
+          "AND": [
+            {
+              "cellType": "code"
+            },
+            {
+              "hasError": true
+            }
+          ]
+        },
+        "config": {
+          "chatEnabled": true,
+          "chatProactive": true,
+          "quickResponses": ["Explain this error."]
+        }
+      },
+    ])
     .describe(
       'List of rules with conditions (deciding whether the rule should apply to a particular cell) and configurations. Rules are applied in order, with later rules overriding earlier ones (if they apply to a particular cell).'
     ),

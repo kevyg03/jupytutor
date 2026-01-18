@@ -159,7 +159,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
         const notebookConfig = loadConfiguration(notebookModel);
 
-        console.log({ notebookConfig });
+        if (DEMO_PRINTS) console.log({ notebookConfig });
 
         if (!notebookConfig.pluginEnabled) {
           // NEVER DO ANYTHING IF THE ACTIVATION FLAG IS NOT MET, NO MATTER WHAT
@@ -203,6 +203,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
               (codeCell.outputArea.layout as any).addWidget(jupytutor);
             }
           } else if (cell.model.type === 'markdown') {
+            // Check if there's already a JupyTutor widget in this cell and remove it
+            const existingContainer = cell.node.querySelector(
+              '.jp-jupytutor-markdown-container'
+            );
+            if (existingContainer) {
+              existingContainer.remove();
+            }
+
             // Create a proper container div with React mounting point
             const container = document.createElement('div');
             container.className = 'jp-jupytutor-markdown-container';
