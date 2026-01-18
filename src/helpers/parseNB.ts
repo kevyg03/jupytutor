@@ -42,10 +42,7 @@ export interface ParsedCell {
  *
  * @returns allCells, activeIndex, allowed
  */
-const parseNB = (
-  notebook: Notebook,
-  cell: CodeCell | undefined = undefined
-): [ParsedCell[], number] => {
+const parseNB = (notebook: Notebook): [ParsedCell[], number] => {
   let activeIndex = notebook.activeCellIndex;
 
   const cells = notebook.model?.cells ?? [];

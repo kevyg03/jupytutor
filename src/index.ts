@@ -4,20 +4,18 @@ import {
 } from '@jupyterlab/application';
 import { Cell, CodeCell } from '@jupyterlab/cells';
 import {
+  INotebookModel,
   INotebookTracker,
   Notebook,
   NotebookActions
 } from '@jupyterlab/notebook';
-import { ServerConnection } from '@jupyterlab/services';
 import JupytutorWidget from './Jupytutor';
-import defaultConfig from './config';
+import { applyConfigRules } from './helpers/config-rules';
 import { parseContextFromNotebook } from './helpers/context/notebookContextParsing';
 import NotebookContextRetrieval, {
   STARTING_TEXTBOOK_CONTEXT
 } from './helpers/context/notebookContextRetrieval';
-import { applyConfigRules } from './helpers/config-rules';
 import parseNB from './helpers/parseNB';
-import { JupytutorNotebookMetadataSchema } from './schemas/notebook-metadata';
 import { ConfigSchema } from './schemas/config';
 
 export const DEMO_PRINTS = true;
@@ -47,18 +45,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
   autoStart: true,
   requires: [INotebookTracker],
   activate: async (app: JupyterFrontEnd, notebookTracker: INotebookTracker) => {
-    // Try to load user config from ~/.config/jupytutor/config.json
-    let finalConfig = await loadConfiguration();
-    if (DEMO_PRINTS) {
-      console.log(
-        '[Jupytutor]: Loaded configuration.'
-        // finalConfig
-      );
-    }
-
-    const SEND_TEXTBOOK_WITH_REQUEST =
-      finalConfig.remoteContextGathering.enabled;
-
     // Get the DataHub user identifier
     const userId = getUserIdentifier();
 
@@ -80,14 +66,18 @@ const plugin: JupyterFrontEndPlugin<void> = {
         await currentWidget.revealed;
 
         const notebook = currentWidget.content;
+        const notebookModel = notebook.model;
+        if (!notebookModel) {
+          console.warn(
+            '[Jupytutor]: No notebook model found for context gathering'
+          );
+          return;
+        }
 
-        const jupytutorMetadata =
-          notebook.model?.getMetadata('jupytutor') ?? {};
-        const parsedMetadata =
-          JupytutorNotebookMetadataSchema.parse(jupytutorMetadata);
+        const notebookConfig = loadConfiguration(notebookModel);
 
         // TODO: listen for changes
-        pluginEnabled = parsedMetadata.enabled;
+        pluginEnabled = notebookConfig.pluginEnabled;
 
         // Skip context gathering if activation flag criteria not met
         if (!pluginEnabled) {
@@ -100,7 +90,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         }
 
         // Parse the notebook to get all cells and their links
-        const [allCells, _] = parseNB(notebook, undefined);
+        const [allCells, _] = parseNB(notebook);
 
         if (DEMO_PRINTS) {
           console.log(
@@ -111,7 +101,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
         notebookContextRetriever = await parseContextFromNotebook(
           allCells,
-          finalConfig
+          notebookConfig
         );
 
         if (DEMO_PRINTS) {
@@ -167,8 +157,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
           return;
         }
 
-        const rawConfig = notebookModel.getMetadata('jupytutor') ?? {};
-        const notebookConfig = ConfigSchema.parse(rawConfig);
+        const notebookConfig = loadConfiguration(notebookModel);
 
         console.log({ notebookConfig });
 
@@ -180,142 +169,77 @@ const plugin: JupyterFrontEndPlugin<void> = {
         const cellIndex = [...notebookModel.cells].findIndex(
           c => c === cell.model
         );
-        console.log({ notebookModel, cellIndex, rules: notebookConfig.rules });
         const cellConfig = applyConfigRules(
           notebookModel,
           cellIndex,
           notebookConfig.rules
         );
-        console.log({ cellConfig });
+        if (DEMO_PRINTS) console.log({ cellConfig });
 
         if (cellConfig.chatEnabled && cellConfig.chatProactive) {
-          const codeCell = cell as CodeCell;
+          const [allCells, activeIndex] = parseNB(notebook);
 
-          // activeIndex is guaranteed to be the cell just run within parseNB by cross-referencing cell
-          const [allCells, activeIndex] = parseNB(notebook, codeCell);
+          const jupytutor = new JupytutorWidget({
+            autograderResponse: '',
+            allCells,
+            activeIndex,
+            localContextScope: 'upToGrader',
+            sendTextbookWithRequest:
+              notebookConfig.remoteContextGathering.enabled,
+            notebookContextRetriever,
+            cellType: 'code',
+            userId,
+            baseURL: notebookConfig.api.baseURL,
+            instructorNote: cellConfig.instructorNote,
+            quickResponses: cellConfig.quickResponses
+          });
 
-          if (codeCell.outputArea && codeCell.outputArea.layout) {
-            // const autograderResponse =
-            //   codeCell.outputArea.layout.widgets[0].node.innerText;
+          // TODO: rejig 'active cell' logic
 
-            const jupytutor = new JupytutorWidget({
-              autograderResponse: '',
-              allCells,
-              activeIndex,
-              localContextScope: 'upToGrader',
-              sendTextbookWithRequest: SEND_TEXTBOOK_WITH_REQUEST,
-              notebookContextRetriever,
-              cellType: 'code',
-              userId,
-              baseURL: finalConfig.api.baseURL,
-              instructorNote: cellConfig.instructorNote,
-              quickResponses: cellConfig.quickResponses
+          if (cell.model.type === 'code') {
+            const codeCell = cell as CodeCell;
+
+            if (codeCell.outputArea && codeCell.outputArea.layout) {
+              (codeCell.outputArea.layout as any).addWidget(jupytutor);
+            }
+          } else if (cell.model.type === 'markdown') {
+            // Create a proper container div with React mounting point
+            const container = document.createElement('div');
+            container.className = 'jp-jupytutor-markdown-container';
+            container.style.cssText = `
+          margin-top: 15px;
+          border: 1px solid #e0e0e0;
+          border-radius: 6px;
+          padding: 0;
+          background-color: #ffffff;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        `;
+
+            // Mount the ReactWidget properly
+            container.appendChild(jupytutor.node);
+
+            // Add to the cell
+            cell.node.appendChild(container);
+
+            // Ensure React renders by calling update after DOM insertion
+            requestAnimationFrame(() => {
+              jupytutor.update();
             });
-
-            (codeCell.outputArea.layout as any).addWidget(jupytutor);
+          } else {
+            console.warn(
+              '[Jupytutor]: Unknown cell type; not adding Jupytutor widget.'
+            );
           }
         }
-        // TODO -- different mount point depending on whether this is a markdown cell or a code cell (w/ output area)
-        //   // Create a proper container div with React mounting point
-        //   const container = document.createElement('div');
-        //   container.className = 'jp-jupytutor-markdown-container';
-        //   container.style.cssText = `
-        //   margin-top: 15px;
-        //   border: 1px solid #e0e0e0;
-        //   border-radius: 6px;
-        //   padding: 0;
-        //   background-color: #ffffff;
-        //   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        // `;
-
-        //   // Mount the ReactWidget properly
-        //   container.appendChild(jupytutor.node);
-
-        //   // Add to the cell
-        //   cell.node.appendChild(container);
-
-        //   // Ensure React renders by calling update after DOM insertion
-        //   requestAnimationFrame(() => {
-        //     jupytutor.update();
-        //   });
       }
     );
   }
 };
 
-const loadConfiguration = async () => {
-  let finalConfig = { ...defaultConfig };
-  try {
-    const settings = ServerConnection.makeSettings();
-    const response = await ServerConnection.makeRequest(
-      `${settings.baseUrl}jupytutor/config`,
-      { method: 'GET' },
-      settings
-    );
-
-    if (response.ok) {
-      const data = await response.json();
-      if (data.status === 'success' && data.config) {
-        if (JSONVerify(finalConfig, data.config)) {
-          finalConfig = recursiveJSONModify(finalConfig, data.config);
-        } else {
-          console.error(
-            'ERROR: User config does not match the default config. Changes not reflected. Edit ~/.config/jupytutor/config.json to fix this.'
-          );
-          return finalConfig;
-        }
-      }
-    } else {
-      console.error('ERROR: Failed to load config from server.');
-    }
-  } catch (error) {
-    // Config file doesn't exist or failed to load - use default config
-    if (DEMO_PRINTS) {
-      console.log(
-        '[Jupytutor]: No user config found at ~/.config/jupytutor/config.json, using default config'
-      );
-    }
-  }
-  return finalConfig;
-};
-
-/**
- * Takes two JSON objects, and modifies the first 1 throughout its entire structure with values
- * found in the second in the exact same structure location.
- *
- * DOES NOT add any new keys to the first object, or delete any keys from the first object.
- * IT ONLY MODIFIES THE VALUES OF THE FIRST OBJECT. Based on the structure of the second object.
- * @param obj1 - The first JSON object to modify
- * @param obj2 - The second JSON object to use as the source of truth
- * @returns The copy of the first object with the values modified
- */
-const recursiveJSONModify = (obj1: any, obj2: any): any => {
-  const newObj = { ...obj1 };
-  return Object.keys(obj2).reduce((acc, key) => {
-    if (obj2[key] && typeof obj2[key] === 'object') {
-      acc[key] = recursiveJSONModify(acc[key], obj2[key]);
-    } else {
-      if (key in obj1) acc[key] = obj2[key];
-    }
-    return acc;
-  }, newObj);
-};
-
-/**
- * Returns TRUE if obj2 contains a SUBSET of all the keys in the same structure location as obj1.
- * If obj2 contains a key that is not in obj1 at the same point of the structure, returns FALSE.
- *
- * @param obj1
- * @param obj2
- */
-const JSONVerify = (obj1: any, obj2: any): boolean => {
-  return Object.keys(obj2).every(key => {
-    if (obj2[key] && typeof obj2[key] === 'object') {
-      return JSONVerify(obj1[key], obj2[key]);
-    } else {
-      return key in obj1;
-    }
-  });
+const loadConfiguration = (notebookModel: INotebookModel) => {
+  const rawConfig = notebookModel.getMetadata('jupytutor') ?? {};
+  const notebookConfig = ConfigSchema.parse(rawConfig);
+  return notebookConfig;
 };
 
 export default plugin;
