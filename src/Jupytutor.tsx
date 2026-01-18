@@ -122,10 +122,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
           role: 'system' as const,
           content: [
             {
-              text:
-                "The following is the student's response to the free response question directly above: [response start]" +
-                cell.text +
-                '\n[response over]. Provide concise feedback on the response with a focus on accuracy and understanding.',
+              text: cell.text,
               type: 'input_text'
             }
           ],

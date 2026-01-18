@@ -1,4 +1,4 @@
-import { CodeCell, CodeCellModel, ICellModel } from '@jupyterlab/cells';
+import { CodeCellModel, ICellModel } from '@jupyterlab/cells';
 import { Notebook } from '@jupyterlab/notebook';
 import { IOutputModel } from '@jupyterlab/rendermime';
 
