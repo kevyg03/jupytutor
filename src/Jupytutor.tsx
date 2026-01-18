@@ -35,6 +35,10 @@ interface ChatHistoryItem {
   noShow?: boolean;
 }
 
+const getOutputText = (cell: ParsedCell): string => {
+  return cell.outputs.map(output => JSON.stringify(output)).join('\n');
+};
+
 export const Jupytutor = (props: JupytutorProps): JSX.Element => {
   const STARTING_MESSAGE = '';
   const [inputValue, setInputValue] = useState(STARTING_MESSAGE);
@@ -89,7 +93,8 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
     }
 
     const notebookContext: ChatHistoryItem[] = cells.map(cell => {
-      const hasOutput = cell.outputText !== '' && cell.outputText != null;
+      const hasOutput =
+        getOutputText(cell) !== '' && getOutputText(cell) != null;
       if ((hasOutput && cell.type === 'code') || cell.type === 'grader') {
         return {
           role: 'system' as const,
@@ -99,7 +104,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
                 // 'The student (user role) is provided a coding skeleton and has submitted the following code:\n' +
                 cell.text +
                 '\nThe above code produced the following output:\n' +
-                cell.outputText,
+                getOutputText(cell),
               type: 'input_text'
             }
           ],
