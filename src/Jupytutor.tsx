@@ -1,32 +1,33 @@
 // import { Widget } from '@lumino/widgets';
-import { useState, useEffect, useRef, useMemo } from 'react';
-import { ParsedCell } from './helpers/parseNB';
+import { useEffect, useRef, useState } from 'react';
+import type { ParsedCell, ParsedCellType } from './helpers/parseNB';
 
 import { ReactWidget } from '@jupyterlab/apputils';
-import { makeAPIRequest } from './helpers/makeAPIRequest';
-import '../style/index.css';
-import ContextRetrieval, {
-  STARTING_TEXTBOOK_CONTEXT
-} from './helpers/contextRetrieval';
-import { formatMessage } from './helpers/messageFormatting';
 import { DEMO_PRINTS } from '.';
+import '../style/index.css';
+import NotebookContextRetrieval, {
+  STARTING_TEXTBOOK_CONTEXT
+} from './helpers/context/notebookContextRetrieval';
+import { makeAPIRequest } from './helpers/makeAPIRequest';
+import { formatMessage } from './helpers/messageFormatting';
 
 export interface JupytutorProps {
   autograderResponse: string | undefined;
   allCells: ParsedCell[];
   activeIndex: number;
-  notebookContext: 'whole' | 'upToGrader' | 'fiveAround' | 'tenAround' | 'none';
+  localContextScope:
+    | 'whole'
+    | 'upToGrader'
+    | 'fiveAround'
+    | 'tenAround'
+    | 'none';
   sendTextbookWithRequest: boolean;
-  contextRetriever: ContextRetrieval | null;
-  cellType:
-    | 'code'
-    | 'free_response'
-    | 'grader'
-    | 'success'
-    | 'error'
-    | 'grader_not_initialized';
+  notebookContextRetriever: NotebookContextRetrieval | null;
+  cellType: ParsedCellType;
   userId: string | null;
-  config: any;
+  baseURL: string;
+  instructorNote: string | null;
+  quickResponses: string[];
 }
 
 interface ChatHistoryItem {
@@ -34,6 +35,34 @@ interface ChatHistoryItem {
   content: { text: string; type: string }[] | string;
   noShow?: boolean;
 }
+
+const getCodeCellOutputAsLLMContent = (
+  cell: ParsedCell
+): { type: 'input_text'; text: string }[] => {
+  return cell.outputs.map(output => {
+    if ('image/png' in output.data) {
+      return {
+        type: 'input_text',
+        // TODO: include in the chat prompt
+        text: '[Image output]'
+      };
+    }
+    if ('text/html' in output.data) {
+      return {
+        type: 'input_text',
+        text: output.data['text/html']?.toString() ?? ''
+      };
+    }
+    if ('text/plain' in output.data) {
+      return {
+        type: 'input_text',
+        text: output.data['text/plain']?.toString() ?? ''
+      };
+    }
+    // TODO: make sure this is getting trimmed somewhere
+    return { type: 'input_text', text: JSON.stringify(output.data) };
+  });
+};
 
 export const Jupytutor = (props: JupytutorProps): JSX.Element => {
   const STARTING_MESSAGE = '';
@@ -46,18 +75,20 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
 
   const {
     sendTextbookWithRequest,
-    contextRetriever,
+    notebookContextRetriever: contextRetriever,
     cellType,
     userId,
-    config
+    baseURL,
+    instructorNote,
+    quickResponses
   } = props;
 
-  const createChatContextFromCells = (
+  const createChatContextFromCells = async (
     cells: ParsedCell[]
-  ): ChatHistoryItem[] => {
+  ): Promise<ChatHistoryItem[]> => {
     let textbookContext: ChatHistoryItem[] = [];
     if (sendTextbookWithRequest && contextRetriever != null) {
-      const context = contextRetriever.getContext();
+      const context = await contextRetriever.getContext();
 
       textbookContext = [
         {
@@ -89,23 +120,22 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
     }
 
     const notebookContext: ChatHistoryItem[] = cells.map(cell => {
-      const hasOutput = cell.outputText !== '' && cell.outputText != null;
-      if ((hasOutput && cell.type === 'code') || cell.type === 'grader') {
+      const output = getCodeCellOutputAsLLMContent(cell);
+      const hasOutput = output.length > 0;
+      if (hasOutput && cell.type === 'code') {
         return {
           role: 'system' as const,
           content: [
             {
               text:
-                // 'The student (user role) is provided a coding skeleton and has submitted the following code:\n' +
-                cell.text +
-                '\nThe above code produced the following output:\n' +
-                cell.outputText,
+                cell.text + '\nThe above code produced the following output:\n',
               type: 'input_text'
-            }
+            },
+            ...output
           ],
           noShow: true
         };
-      } else if (cell.type === 'free_response') {
+      } else if (cell.type === 'markdown') {
         if (DEMO_PRINTS)
           console.log(
             '[Jupytutor]: Sending free response prompt with request!'
@@ -114,10 +144,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
           role: 'system' as const,
           content: [
             {
-              text:
-                "The following is the student's response to the free response question directly above: [response start]" +
-                cell.text +
-                '\n[response over]. Provide concise feedback on the response with a focus on accuracy and understanding.',
+              text: cell.text,
               type: 'input_text'
             }
           ],
@@ -128,7 +155,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
         role: 'system' as const,
         content: [
           {
-            text: cell.text,
+            text: cell.text ?? '',
             type: 'input_text'
           }
         ],
@@ -136,7 +163,24 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
       };
     });
 
-    return [...textbookContext, ...notebookContext];
+    return [
+      ...textbookContext,
+      ...notebookContext,
+      ...(instructorNote !== null
+        ? [
+            {
+              role: 'system' as const,
+              content: [
+                {
+                  text: instructorNote,
+                  type: 'input_text'
+                }
+              ],
+              noShow: true
+            }
+          ]
+        : [])
+    ];
   };
 
   /**
@@ -158,30 +202,27 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
       i--
     ) {
       const cell = cells[i];
-      if (cell.images.length > 0 && cell.type === 'code') {
-        images.push(...cell.images);
+      if (cell.imageSources.length > 0 && cell.type === 'code') {
+        images.push(...cell.imageSources);
       }
-      if (cell.images.length > 0 && cell.type !== 'code') {
-        images.push(...cell.images);
+      if (cell.imageSources.length > 0 && cell.type !== 'code') {
+        images.push(...cell.imageSources);
         break;
       }
     }
     return images.slice(0, maxImages);
   };
 
-  const gatherContext = () => {
+  const gatherLocalContext = async () => {
+    const activeCell = props.allCells[props.activeIndex];
     const filteredCells = props.allCells.filter(
       cell =>
-        cell.images.length > 0 ||
-        cell.text !== '' ||
-        cell.text != null ||
-        cell.outputText != null
+        cell.imageSources.length > 0 || cell.text !== '' || cell.text != null
+      // TODO // || cell.outputText != null
     );
-    const newActiveIndex = filteredCells.findIndex(
-      cell => cell.index === props.activeIndex
-    );
+    const newActiveIndex = filteredCells.findIndex(cell => cell === activeCell);
     let contextCells;
-    switch (props.notebookContext) {
+    switch (props.localContextScope) {
       case 'whole':
         contextCells = filteredCells;
         break;
@@ -307,10 +348,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
 
   const autoNewMessage =
     'This is my current attempt at the question. Focus on providing concise and accurate feedback that promotes understanding.';
-  const queryAPI = async (
-    forceSuggestion?: string,
-    useStreaming: boolean = config.usage.use_streaming
-  ) => {
+  const queryAPI = async (forceSuggestion?: string) => {
     const noInput = inputValue === STARTING_MESSAGE && !forceSuggestion;
     const firstQuery = chatHistory.length === 0;
     if (noInput && !firstQuery) return;
@@ -343,7 +381,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
     try {
       // Only gather context once on the first query
       if (!hasGatheredInitialContext.current) {
-        initialContextData.current = gatherContext();
+        initialContextData.current = await gatherLocalContext();
       }
 
       // For the first query, include initial notebook context
@@ -386,7 +424,8 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
         };
       });
 
-      if (useStreaming) {
+      // TODO - i think we can just keep this on. successful feature flag
+      if (true) {
         // Use streaming request
         setLiveResult(''); // Clear previous live result
 
@@ -411,16 +450,13 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
             }
           });
 
-        const response = await fetch(
-          `${config.api.baseURL}interaction/stream`,
-          {
-            method: 'POST',
-            body: formData,
-            mode: 'cors',
-            credentials: 'include',
-            cache: 'no-cache'
-          }
-        );
+        const response = await fetch(`${baseURL}interaction/stream`, {
+          method: 'POST',
+          body: formData,
+          mode: 'cors',
+          credentials: 'include',
+          cache: 'no-cache'
+        });
 
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -494,9 +530,9 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
         if (!response.success) {
           console.error('API request failed:', response.error);
           // Remove user message if request failed
-          if (!(firstQuery && config.usage.automatic_first_query_on_error)) {
-            setChatHistory(prev => prev.slice(0, -1));
-          }
+          // if (!(firstQuery && config.usage.automatic_first_query_on_error)) {
+          //   setChatHistory(prev => prev.slice(0, -1));
+          // }
         } else {
           handleQueryResult(response.data, noInput, newMessage);
         }
@@ -594,16 +630,17 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
     }
   };
 
-  useEffect(() => {
-    if (
-      config.usage.automatic_first_query_on_error &&
-      cellType === 'grader' &&
-      chatHistory.length === 0
-    ) {
-      queryAPI();
-      setInputValue('Generating analysis...');
-    }
-  }, []);
+  // TODO - this is disabled in the default config - decide whether to keep it around
+  // useEffect(() => {
+  //   if (
+  //     config.usage.automatic_first_query_on_error &&
+  //     cellType === 'code' &&
+  //     chatHistory.length === 0
+  //   ) {
+  //     queryAPI();
+  //     setInputValue('Generating analysis...');
+  //   }
+  // }, []);
 
   const callSuggestion = (suggestion: string) => {
     if (isLoading) return;
@@ -615,42 +652,6 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
     if (isLoading) return;
     queryAPI(inputValue);
   };
-
-  const options: TailoredOptionProps[] = useMemo(() => {
-    let opts: TailoredOptionProps[];
-
-    if (cellType === 'grader')
-      opts = [
-        { id: 'error', text: 'Explain this error.' },
-        {
-          id: 'source',
-          text: 'Provide a concise list of important review materials.'
-        },
-        { id: 'progress', text: 'What progress have I made so far?' }
-      ];
-    else if (cellType === 'free_response')
-      opts = [
-        {
-          id: 'evaluate',
-          text: 'Evaluate my answer.'
-        }
-      ];
-    else if (cellType === 'success')
-      opts = [
-        { id: 'clarify', text: "I still don't feel confident in my answer." },
-        {
-          id: 'source_success',
-          text: 'Provide me three important review materials.'
-        },
-        {
-          id: 'improvements',
-          text: 'Can I make further improvements?'
-        }
-      ];
-    else opts = [];
-
-    return opts;
-  }, [cellType]);
 
   return (
     // Note we can use the same CSS classes from Method 1
@@ -675,12 +676,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
                 {isUser ? (
                   <ChatBubble message={message} position="right" />
                 ) : (
-                  <AssistantMessage
-                    message={message}
-                    streaming={
-                      !config.usage.use_streaming ? 'none' : 'streamed'
-                    }
-                  />
+                  <AssistantMessage message={message} streaming={'streamed'} />
                 )}
               </div>
             );
@@ -704,9 +700,9 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
         )}
       </div>
 
-      {options.length > 0 && (
+      {quickResponses.length > 0 && (
         <TailoredOptions
-          options={options}
+          options={quickResponses}
           callSuggestion={callSuggestion}
           isLoading={isLoading}
         />
@@ -723,7 +719,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
 };
 
 interface TailoredOptionsProps {
-  options: TailoredOptionProps[];
+  options: string[];
   callSuggestion: (suggestion: string) => void;
   isLoading: boolean;
 }
@@ -735,8 +731,8 @@ const TailoredOptions = (props: TailoredOptionsProps): JSX.Element => {
     >
       {props.options.map((item, index) => (
         <TailoredOption
-          {...item}
-          key={item.id}
+          text={item}
+          key={index}
           callSuggestion={props.callSuggestion}
         />
       ))}
@@ -745,7 +741,6 @@ const TailoredOptions = (props: TailoredOptionsProps): JSX.Element => {
 };
 
 interface TailoredOptionProps {
-  id: string;
   text: string;
   callSuggestion?: (suggestion: string) => void;
 }
@@ -795,6 +790,7 @@ interface AssistantMessageProps {
   streaming: 'none' | 'streamed' | 'streaming';
 }
 
+// TODO inspect this timeout
 const AssistantMessage = (props: AssistantMessageProps): JSX.Element => {
   const { message, streaming } = props;
   const [isVisible, setIsVisible] = useState(streaming !== 'none');
@@ -874,12 +870,14 @@ class JupytutorWidget extends ReactWidget {
       autograderResponse: undefined,
       allCells: [],
       activeIndex: -1,
-      notebookContext: 'upToGrader',
+      localContextScope: 'upToGrader',
       sendTextbookWithRequest: false,
-      contextRetriever: null,
+      notebookContextRetriever: null,
       cellType: 'code',
       userId: null,
-      config: {}
+      baseURL: '',
+      instructorNote: null,
+      quickResponses: []
     }
   ) {
     super();

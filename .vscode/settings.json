@@ -1,0 +1,6 @@
+{
+  // disable the ESLint extension at workspace level
+  "eslint.enable": false,
+  // stop any ESLint run-on-save or validation
+  "eslint.validate": []
+}
