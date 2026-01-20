@@ -44,6 +44,18 @@
   background-color: var(--jp-brand-color0);
 }
 
+.jupytutor .menu-btn {
+  background-color: transparent;
+  color: var(--jp-content-font-color2);
+  display: flex;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+.jupytutor .menu-btn:hover {
+  background-color: rgba(128, 128, 128, 0.3);
+}
+
 .jupytutor p {
   margin-top: 10px;
   font-style: italic;
@@ -612,6 +624,7 @@
 .chat-input-container.loading {
   animation: containerPulse 2s ease-in-out infinite;
   position: relative;
+  overflow-x: hidden;
 }
 
 .chat-input-container.loading::before {
