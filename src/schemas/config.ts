@@ -50,28 +50,54 @@ export const ConfigSchema = z.object({
     )
     .default([
       {
+        _comment: 'Jupytutor always available, but only when manually invoked',
         config: {
           chatEnabled: true,
           chatProactive: false
         }
       },
       {
-        "when": {
-          "AND": [
+        _comment: "Display proactively when there's an error in a code cell",
+        when: {
+          AND: [
             {
-              "cellType": "code"
+              cellType: 'code'
             },
             {
-              "hasError": true
+              hasError: true
             }
           ]
         },
-        "config": {
-          "chatEnabled": true,
-          "chatProactive": true,
-          "quickResponses": ["Explain this error."]
+        config: {
+          chatEnabled: true,
+          chatProactive: true,
+          quickResponses: ['Explain this error.']
         }
       },
+      {
+        _comment:
+          "Disable proactive mode when there's an explicit disable tag (best to keep this rule toward the end)",
+        when: {
+          tags: {
+            any: 'jupytutor:disable_proactive'
+          }
+        },
+        config: {
+          chatEnabled: false
+        }
+      },
+      {
+        _comment:
+          "Disable when there's an explicit disable tag (best to keep this rule at the end)",
+        when: {
+          tags: {
+            any: 'jupytutor:disable'
+          }
+        },
+        config: {
+          chatEnabled: false
+        }
+      }
     ])
     .describe(
       'List of rules with conditions (deciding whether the rule should apply to a particular cell) and configurations. Rules are applied in order, with later rules overriding earlier ones (if they apply to a particular cell).'
@@ -109,6 +135,20 @@ export const ConfigSchema = z.object({
         })
         .prefault({})
     })
+    .prefault({}),
+
+  preferences: z
+    .object({
+      proactiveEnabled: z
+        .boolean()
+        .default(true)
+        .describe(
+          'Global setting to enable or disable proactive chat behavior. Overrides notebook rule configuration.'
+        )
+    })
+    .describe(
+      "User preferences set for the plugin; generally shouldn't be included as part of an assignment, but rather set after the notebook has been started by the student."
+    )
     .prefault({})
 });
 

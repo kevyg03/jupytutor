@@ -3,13 +3,18 @@ import { useEffect, useRef, useState } from 'react';
 import type { ParsedCell, ParsedCellType } from './helpers/parseNB';
 
 import { ReactWidget } from '@jupyterlab/apputils';
+import { Menu, MenuButton, MenuItem } from '@szhsin/react-menu';
+import { produce } from 'immer';
 import { DEMO_PRINTS } from '.';
 import '../style/index.css';
+import '@szhsin/react-menu/dist/index.css';
 import NotebookContextRetrieval, {
   STARTING_TEXTBOOK_CONTEXT
 } from './helpers/context/notebookContextRetrieval';
 import { makeAPIRequest } from './helpers/makeAPIRequest';
 import { formatMessage } from './helpers/messageFormatting';
+import { PluginConfig } from './schemas/config';
+import { useJupytutorReactState, useNotebookPreferences } from './store';
 
 export interface JupytutorProps {
   autograderResponse: string | undefined;
@@ -28,6 +33,7 @@ export interface JupytutorProps {
   baseURL: string;
   instructorNote: string | null;
   quickResponses: string[];
+  setNotebookConfig: (newConfig: PluginConfig) => void;
 }
 
 interface ChatHistoryItem {
@@ -72,6 +78,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
   const initialContextData = useRef<ChatHistoryItem[]>([]);
 
   const [liveResult, setLiveResult] = useState<string | null>(null);
+  const notebookConfig = useJupytutorReactState(state => state.notebookConfig);
 
   const {
     sendTextbookWithRequest,
@@ -713,6 +720,17 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
         onSubmit={callCurrentChatInput}
         isLoading={isLoading}
         placeholder="Ask JupyTutor anything..."
+        setProactiveEnabled={(enabled: boolean) => {
+          props.setNotebookConfig(
+            produce(notebookConfig, (draft: PluginConfig) => {
+              if (!draft.preferences) {
+                draft.preferences = { proactiveEnabled: enabled };
+                return;
+              }
+              draft.preferences.proactiveEnabled = enabled;
+            })
+          );
+        }}
       />
     </div>
   );
@@ -818,10 +836,12 @@ interface ChatInputProps {
   onSubmit: () => void;
   isLoading: boolean;
   placeholder?: string;
+  setProactiveEnabled: (enabled: boolean) => void;
 }
 
 const ChatInput = (props: ChatInputProps): JSX.Element => {
   const { value, onChange, onSubmit, isLoading, placeholder } = props;
+  const proactiveEnabled = useNotebookPreferences()?.proactiveEnabled;
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey && !isLoading) {
@@ -859,6 +879,36 @@ const ChatInput = (props: ChatInputProps): JSX.Element => {
           </svg>
         )}
       </button>
+      {/* TODO: i kind of wanted this button to the left, but it overlaps with the output-area-enter click. */}
+      {/* should widget go in output area? */}
+      <Menu
+        menuButton={
+          <MenuButton
+            className={`menu-btn ${proactiveEnabled ? 'enabled' : 'disabled'}`}
+            aria-label="Options"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 8 16"
+              width="8"
+              height="16"
+              aria-hidden="true"
+            >
+              <circle cx="4" cy="3" r="1.5" />
+              <circle cx="4" cy="8" r="1.5" />
+              <circle cx="4" cy="13" r="1.5" />
+            </svg>
+          </MenuButton>
+        }
+        direction="top"
+        portal
+      >
+        <MenuItem onClick={() => props.setProactiveEnabled(!proactiveEnabled)}>
+          {proactiveEnabled
+            ? 'Turn off Jupytutor for this notebook'
+            : 'Turn on Jupytutor for this notebook'}
+        </MenuItem>
+      </Menu>
     </div>
   );
 };
@@ -877,7 +927,8 @@ class JupytutorWidget extends ReactWidget {
       userId: null,
       baseURL: '',
       instructorNote: null,
-      quickResponses: []
+      quickResponses: [],
+      setNotebookConfig: () => {}
     }
   ) {
     super();

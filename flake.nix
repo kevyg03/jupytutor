@@ -43,6 +43,7 @@
             echo "Virtualenv active: .venv"
             echo "Installing environment packages (numpy, otter-grader, datascience)"
             pip install --upgrade pip
+            pip install build twine hatchling hatch-jupyter-builder
             pip install numpy otter-grader datascience
             echo "Installing JupyterLab + kernel in venv"
             pip install jupyterlab ipykernel
@@ -54,6 +55,8 @@
             jupyter labextension develop . --overwrite
             echo "jupytutor dev shell ready"
             echo "Run JupyterLab: jupyter lab"
+            echo "Or, to build prod release: jlpm install; jlpm build:prod; python -m build"
+            echo "(to clean first: jlpm clean:all && rm -rf dist build *.egg-info jupytutor/labextension)"
           '';
         };
       });

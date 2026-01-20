@@ -16,7 +16,8 @@ import NotebookContextRetrieval, {
   STARTING_TEXTBOOK_CONTEXT
 } from './helpers/context/notebookContextRetrieval';
 import parseNB from './helpers/parseNB';
-import { ConfigSchema } from './schemas/config';
+import { ConfigSchema, PluginConfig } from './schemas/config';
+import { useJupytutorReactState } from './store';
 
 export const DEMO_PRINTS = true;
 
@@ -176,7 +177,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
         );
         if (DEMO_PRINTS) console.log({ cellConfig });
 
-        if (cellConfig.chatEnabled && cellConfig.chatProactive) {
+        const proactiveEnabledForSession =
+          notebookConfig.preferences.proactiveEnabled;
+
+        const proactiveEnabledForCell =
+          cellConfig.chatProactive && proactiveEnabledForSession;
+
+        if (cellConfig.chatEnabled && proactiveEnabledForCell) {
           const [allCells, activeIndex] = parseNB(notebook);
 
           const jupytutor = new JupytutorWidget({
@@ -191,7 +198,12 @@ const plugin: JupyterFrontEndPlugin<void> = {
             userId,
             baseURL: notebookConfig.api.baseURL,
             instructorNote: cellConfig.instructorNote,
-            quickResponses: cellConfig.quickResponses
+            quickResponses: cellConfig.quickResponses,
+            setNotebookConfig: (newConfig: PluginConfig) => {
+              // todo possibly put this function in the zustand state, too
+              notebookModel.setMetadata('jupytutor', newConfig);
+              loadConfiguration(notebookModel);
+            }
           });
 
           // TODO: rejig 'active cell' logic
@@ -247,6 +259,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
 const loadConfiguration = (notebookModel: INotebookModel) => {
   const rawConfig = notebookModel.getMetadata('jupytutor') ?? {};
   const notebookConfig = ConfigSchema.parse(rawConfig);
+  // reload into Zustand store
+  useJupytutorReactState.setState({ notebookConfig });
   return notebookConfig;
 };
 

@@ -8,7 +8,7 @@ import { ConfigSchema } from './schemas/config';
  *
  * Structure ~/.config/jupytutor/config.json the same as the exported config object.
  */
-export const defaultConfig: z.output<typeof ConfigSchema> = {
+export const defaultConfig: z.input<typeof ConfigSchema> = {
   pluginEnabled: true,
   api: {
     baseURL: 'http://localhost:3000/'
@@ -31,6 +31,7 @@ export const defaultConfig: z.output<typeof ConfigSchema> = {
 
   rules: [
     {
+      _comment: 'Default rule: disable chat in all cells',
       config: {
         chatEnabled: false
       }
@@ -73,9 +74,18 @@ export const defaultConfig: z.output<typeof ConfigSchema> = {
                 }
               },
               {
-                tags: {
-                  any: 'jupytutor_grader_cell'
-                }
+                OR: [
+                  {
+                    tags: {
+                      any: 'jupytutor:grader_cell'
+                    }
+                  },
+                  {
+                    tags: {
+                      any: 'jupytutor_grader_cell'
+                    }
+                  }
+                ]
               }
             ]
           },
@@ -120,9 +130,18 @@ export const defaultConfig: z.output<typeof ConfigSchema> = {
                 }
               },
               {
-                tags: {
-                  any: 'jupytutor_grader_cell'
-                }
+                OR: [
+                  {
+                    tags: {
+                      any: 'jupytutor:grader_cell'
+                    }
+                  },
+                  {
+                    tags: {
+                      any: 'jupytutor_grader_cell'
+                    }
+                  }
+                ]
               }
             ]
           },
@@ -164,6 +183,30 @@ export const defaultConfig: z.output<typeof ConfigSchema> = {
         chatEnabled: true,
         chatProactive: true,
         quickResponses: ['Evaluate my answer.']
+      }
+    },
+    {
+      _comment:
+        "Disable proactive mode when there's an explicit disable tag (best to keep this rule toward the end)",
+      when: {
+        tags: {
+          any: 'jupytutor:disable_proactive'
+        }
+      },
+      config: {
+        chatEnabled: false
+      }
+    },
+    {
+      _comment:
+        "Disable when there's an explicit disable tag (best to keep this rule at the end)",
+      when: {
+        tags: {
+          any: 'jupytutor:disable'
+        }
+      },
+      config: {
+        chatEnabled: false
       }
     }
   ]
