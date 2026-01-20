@@ -160,7 +160,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
         const notebookConfig = loadConfiguration(notebookModel);
 
-        if (DEMO_PRINTS) console.log({ notebookConfig });
+        // if (DEMO_PRINTS) console.log({ notebookConfig });
 
         if (!notebookConfig.pluginEnabled) {
           // NEVER DO ANYTHING IF THE ACTIVATION FLAG IS NOT MET, NO MATTER WHAT
@@ -175,7 +175,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
           cellIndex,
           notebookConfig.rules
         );
-        if (DEMO_PRINTS) console.log({ cellConfig });
+        // if (DEMO_PRINTS) console.log({ cellConfig });
 
         const proactiveEnabledForSession =
           notebookConfig.preferences.proactiveEnabled;
