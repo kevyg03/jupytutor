@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from 'react';
 import type { ParsedCell, ParsedCellType } from './helpers/parseNB';
 
 import { ReactWidget } from '@jupyterlab/apputils';
-import { Menu, MenuButton, MenuItem } from '@szhsin/react-menu';
 import { produce } from 'immer';
 import { DEMO_PRINTS } from '.';
 import '../style/index.css';
@@ -12,9 +11,11 @@ import NotebookContextRetrieval, {
   STARTING_TEXTBOOK_CONTEXT
 } from './helpers/context/notebookContextRetrieval';
 import { makeAPIRequest } from './helpers/makeAPIRequest';
-import { formatMessage } from './helpers/messageFormatting';
 import { PluginConfig } from './schemas/config';
-import { useJupytutorReactState, useNotebookPreferences } from './store';
+import { useJupytutorReactState } from './store';
+import { ChatInput } from './Components/ChatInput';
+import { TailoredOptions } from './Components/TailoredOptions';
+import { ChatMessage, ChatHistoryItem, StreamingAssistantMessage } from './Components/ChatMessage';
 
 export interface JupytutorProps {
   autograderResponse: string | undefined;
@@ -34,12 +35,6 @@ export interface JupytutorProps {
   instructorNote: string | null;
   quickResponses: string[];
   setNotebookConfig: (newConfig: PluginConfig) => void;
-}
-
-interface ChatHistoryItem {
-  role: 'user' | 'assistant' | 'system';
-  content: { text: string; type: string }[] | string;
-  noShow?: boolean;
 }
 
 const getCodeCellOutputAsLLMContent = (
@@ -661,50 +656,13 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
   };
 
   return (
-    // Note we can use the same CSS classes from Method 1
     <div className={`jupytutor ${isLoading ? 'loading' : ''}`}>
       <div className="chat-container" ref={chatContainerRef}>
         {chatHistory
           .filter(item => !item.noShow)
-          .map((item, index) => {
-            const message =
-              typeof item.content === 'string'
-                ? item.content
-                : item.content[0].text;
-            const isUser = item.role === 'user';
-
-            return (
-              <div key={index} className="chat-message-wrapper">
-                <div
-                  className={`chat-sender-label ${isUser ? 'user' : 'assistant'}`}
-                >
-                  {isUser ? 'You' : 'JupyTutor'}
-                </div>
-                {isUser ? (
-                  <ChatBubble message={message} position="right" />
-                ) : (
-                  <AssistantMessage message={message} streaming={'streamed'} />
-                )}
-              </div>
-            );
-          })}
-
-        {/* Live streaming result */}
-        {liveResult && (
-          <div className="chat-message-wrapper">
-            <div className="chat-sender-label assistant">JupyTutor</div>
-            <div className="streaming-message">
-              <AssistantMessage message={liveResult} streaming="streaming" />
-              <div className="streaming-indicator">
-                <div className="typing-dots">
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+          .map((item, index) => <ChatMessage {...item} index={index} />)}
+        {/**The above handles the ChatHistory. Below handles a new streaming message.*/}
+        <StreamingAssistantMessage liveResult={liveResult} />
       </div>
 
       {quickResponses.length > 0 && (
@@ -736,183 +694,8 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
   );
 };
 
-interface TailoredOptionsProps {
-  options: string[];
-  callSuggestion: (suggestion: string) => void;
-  isLoading: boolean;
-}
 
-const TailoredOptions = (props: TailoredOptionsProps): JSX.Element => {
-  return (
-    <div
-      className={`tailoredOptionsContainer ${props.isLoading ? 'loading' : ''}`}
-    >
-      {props.options.map((item, index) => (
-        <TailoredOption
-          text={item}
-          key={index}
-          callSuggestion={props.callSuggestion}
-        />
-      ))}
-    </div>
-  );
-};
-
-interface TailoredOptionProps {
-  text: string;
-  callSuggestion?: (suggestion: string) => void;
-}
-
-const TailoredOption = (props: TailoredOptionProps): JSX.Element => {
-  return (
-    <div
-      className="tailoredOption"
-      onClick={() => props.callSuggestion && props.callSuggestion(props.text)}
-    >
-      <h4>{props.text}</h4>
-    </div>
-  );
-};
-
-interface ChatBubbleProps {
-  message: string;
-  position: 'left' | 'right';
-  timestamp?: string;
-}
-
-const ChatBubble = (props: ChatBubbleProps): JSX.Element => {
-  const { message, position, timestamp } = props;
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    // Trigger fade-in animation after component mounts
-    const timer = setTimeout(() => {
-      setIsVisible(true);
-    }, 100); // Small delay for smooth animation
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  return (
-    <div
-      className={`chat-bubble chat-bubble-${position} ${isVisible ? 'chat-bubble-visible' : ''}`}
-    >
-      <div className="chat-message">{message}</div>
-      {timestamp && <div className="chat-timestamp">{timestamp}</div>}
-    </div>
-  );
-};
-
-interface AssistantMessageProps {
-  message: string;
-  streaming: 'none' | 'streamed' | 'streaming';
-}
-
-// TODO inspect this timeout
-const AssistantMessage = (props: AssistantMessageProps): JSX.Element => {
-  const { message, streaming } = props;
-  const [isVisible, setIsVisible] = useState(streaming !== 'none');
-
-  useEffect(() => {
-    if (streaming !== 'none') return;
-    const timer = setTimeout(() => {
-      setIsVisible(true);
-    }, 100);
-    return () => clearTimeout(timer);
-  }, []);
-
-  return (
-    <div
-      className={`assistant-message ${isVisible ? 'assistant-visible' : ''} ${streaming === 'streaming' ? 'assistant-streaming' : ''}`}
-    >
-      {formatMessage(message)}
-    </div>
-  );
-};
-
-interface ChatInputProps {
-  value: string;
-  onChange: (value: string) => void;
-  onSubmit: () => void;
-  isLoading: boolean;
-  placeholder?: string;
-  setProactiveEnabled: (enabled: boolean) => void;
-}
-
-const ChatInput = (props: ChatInputProps): JSX.Element => {
-  const { value, onChange, onSubmit, isLoading, placeholder } = props;
-  const proactiveEnabled = useNotebookPreferences()?.proactiveEnabled;
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey && !isLoading) {
-      e.preventDefault();
-      onSubmit();
-    }
-  };
-
-  return (
-    <div className={`chat-input-container ${isLoading ? 'loading' : ''}`}>
-      <input
-        type="text"
-        className={`chat-input ${isLoading ? 'loading' : ''}`}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        onKeyPress={handleKeyPress}
-        placeholder={placeholder}
-        disabled={isLoading}
-      />
-      <button
-        className={`chat-submit-btn ${isLoading ? 'loading' : ''}`}
-        onClick={onSubmit}
-        disabled={isLoading || !value.trim()}
-      >
-        {isLoading ? (
-          <div className="loading-spinner">
-            <div className="spinner-ring"></div>
-          </div>
-        ) : (
-          <svg className="submit-icon" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"
-              fill="currentColor"
-            />
-          </svg>
-        )}
-      </button>
-      {/* TODO: i kind of wanted this button to the left, but it overlaps with the output-area-enter click. */}
-      {/* should widget go in output area? */}
-      <Menu
-        menuButton={
-          <MenuButton
-            className={`menu-btn ${proactiveEnabled ? 'enabled' : 'disabled'}`}
-            aria-label="Options"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 8 16"
-              width="8"
-              height="16"
-              aria-hidden="true"
-            >
-              <circle cx="4" cy="3" r="1.5" />
-              <circle cx="4" cy="8" r="1.5" />
-              <circle cx="4" cy="13" r="1.5" />
-            </svg>
-          </MenuButton>
-        }
-        direction="top"
-        portal
-      >
-        <MenuItem onClick={() => props.setProactiveEnabled(!proactiveEnabled)}>
-          {proactiveEnabled
-            ? 'Turn off Jupytutor for this notebook'
-            : 'Turn on Jupytutor for this notebook'}
-        </MenuItem>
-      </Menu>
-    </div>
-  );
-};
-
+// Provides an interface for Jupyter to render the React Component
 class JupytutorWidget extends ReactWidget {
   private readonly props: JupytutorProps;
   constructor(
