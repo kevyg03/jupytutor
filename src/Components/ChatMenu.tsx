@@ -24,6 +24,7 @@ export const ChatMenu = (props: ChatMenuProps) => {
             width="8"
             height="16"
             aria-hidden="true"
+            style={{ fill: 'var(--jp-ui-font-color0)' }}
           >
             <circle cx="4" cy="3" r="1.5" />
             <circle cx="4" cy="8" r="1.5" />
