@@ -1,6 +1,25 @@
+import { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { useFadeInVisibleState } from '../hooks/useFadeInVisibleState';
 import '../../style/index.css';
+
+/**
+ * Custom hook for managing fade-in visibility state
+ * @param delay - Delay in milliseconds before setting visible to true (default: 100)
+ * @returns boolean indicating visibility state
+ */
+const useFadeInVisibleState = (delay: number = 100): boolean => {
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsVisible(true);
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [delay]);
+
+  return isVisible;
+};
 
 export interface ChatHistoryItem {
   role: 'user' | 'assistant' | 'system';
