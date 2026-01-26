@@ -2,11 +2,11 @@ import z from 'zod';
 import { ConfigSchema } from './schemas/config';
 
 /**
- * THIS IS THE DEFAULT CONFIGURATION FOR THE EXTENSION.
- *
- * It is overridden by the config file in ~/.config/jupytutor/config.json
- *
+ * NOT USED AS DEFAULT AT THE MOMENT (CONFIG IS ADDED TO JUPYTOR METADATA, SEE loadConfiguration in index.ts)
+ * 
+ * For datahub wide configurations applying to an entire course, could be overridden by a config file in ~/.config/jupytutor/config.json
  * Structure ~/.config/jupytutor/config.json the same as the exported config object.
+ * NOTE: This is currently not the case in this design iteration.
  */
 export const defaultConfig: z.input<typeof ConfigSchema> = {
   pluginEnabled: true,
