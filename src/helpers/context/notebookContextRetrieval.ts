@@ -1,4 +1,5 @@
 import { convert } from 'html-to-text';
+import { devLog } from '../devLog';
 
 // ADD INSTRUCTION FOR USING LINK + CONTEXT TO SOLVE THE ASSIGNMENT
 // add into context
@@ -557,9 +558,7 @@ const scrapePageText = async (
       if (response.status === 404) {
         return null;
       }
-      console.log(
-        `[Jupytutor]: HTTP ${response.status}: ${response.statusText}`
-      );
+      devLog(() => `HTTP ${response.status}: ${response.statusText}`);
       return null;
     }
 
