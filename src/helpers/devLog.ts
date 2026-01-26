@@ -1,4 +1,4 @@
-export const DEV_LOG = true;
+export const DEV_LOG = false;
 
 type DevLogFn = (...logArgFunctions: (() => any | Promise<any>)[]) => void;
 type DevLog = DevLogFn & {
