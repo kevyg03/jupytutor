@@ -7,4 +7,4 @@ export const useJupytutorReactState = create(() => ({
 
 export const useNotebookPreferences = () => {
   return useJupytutorReactState(state => state.notebookConfig.preferences);
-}
+};

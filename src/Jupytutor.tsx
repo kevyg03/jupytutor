@@ -15,7 +15,11 @@ import { PluginConfig } from './schemas/config';
 import { useJupytutorReactState } from './store';
 import { ChatInput } from './Components/ChatInput';
 import { TailoredOptions } from './Components/TailoredOptions';
-import { ChatMessage, ChatHistoryItem, StreamingAssistantMessage } from './Components/ChatMessage';
+import {
+  ChatMessage,
+  ChatHistoryItem,
+  StreamingAssistantMessage
+} from './Components/ChatMessage';
 
 export interface JupytutorProps {
   autograderResponse: string | undefined;
@@ -660,7 +664,9 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
       <div className="chat-container" ref={chatContainerRef}>
         {chatHistory
           .filter(item => !item.noShow)
-          .map((item, index) => <ChatMessage {...item} index={index} />)}
+          .map((item, index) => (
+            <ChatMessage {...item} index={index} />
+          ))}
         {/**The above handles the ChatHistory. Below handles a new streaming message.*/}
         <StreamingAssistantMessage liveResult={liveResult} />
       </div>
@@ -693,7 +699,6 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
     </div>
   );
 };
-
 
 // Provides an interface for Jupyter to render the React Component
 class JupytutorWidget extends ReactWidget {

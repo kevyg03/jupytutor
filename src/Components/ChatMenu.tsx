@@ -6,7 +6,7 @@ interface ChatMenuProps {
   setProactiveEnabled: (enabled: boolean) => void;
 }
 
-// COULD ADD OPTION TO HIDE / MINIMIZE THE CHAT HERE TOO, OR MAKE THIS A SEPARATE BUTTON 
+// COULD ADD OPTION TO HIDE / MINIMIZE THE CHAT HERE TOO, OR MAKE THIS A SEPARATE BUTTON
 
 export const ChatMenu = (props: ChatMenuProps) => {
   const proactiveEnabled = useNotebookPreferences()?.proactiveEnabled;
