@@ -14,7 +14,11 @@ import NotebookContextRetrieval, {
 import { makeAPIRequest } from './helpers/makeAPIRequest';
 import { formatMessage } from './helpers/messageFormatting';
 import { PluginConfig } from './schemas/config';
-import { useJupytutorReactState, useNotebookPreferences } from './store';
+import {
+  useJupytutorReactState,
+  useNotebookPreferences,
+  usePatchKeyCommand750
+} from './store';
 
 export interface JupytutorProps {
   autograderResponse: string | undefined;
@@ -282,6 +286,11 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
         //, chatHistory
       );
   }, [chatHistory]);
+
+  const patchKeyCommand750 = usePatchKeyCommand750();
+  const dataProps = patchKeyCommand750
+    ? { 'data-lm-suppress-shortcuts': true }
+    : {};
 
   /**
    * Converts a base64 data URL to a File object
@@ -662,7 +671,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
 
   return (
     // Note we can use the same CSS classes from Method 1
-    <div className={`jupytutor ${isLoading ? 'loading' : ''}`}>
+    <div className={`jupytutor ${isLoading ? 'loading' : ''}`} {...dataProps}>
       <div className="chat-container" ref={chatContainerRef}>
         {chatHistory
           .filter(item => !item.noShow)
