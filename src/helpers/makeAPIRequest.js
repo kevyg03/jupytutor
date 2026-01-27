@@ -19,7 +19,6 @@
  * @returns {Promise<Object>} Response data
  */
 
-import { DEMO_PRINTS } from '..';
 import config from '../config';
 
 // Configurable API base URL - can be overridden per request

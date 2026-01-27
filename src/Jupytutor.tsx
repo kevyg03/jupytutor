@@ -4,22 +4,21 @@ import type { ParsedCell, ParsedCellType } from './helpers/parseNB';
 
 import { ReactWidget } from '@jupyterlab/apputils';
 import { produce } from 'immer';
-import { DEMO_PRINTS } from '.';
 import '../style/index.css';
-import '@szhsin/react-menu/dist/index.css';
+import { ChatInput } from './Components/ChatInput';
+import {
+  ChatHistoryItem,
+  ChatMessage,
+  StreamingAssistantMessage
+} from './Components/ChatMessage';
+import { TailoredOptions } from './Components/TailoredOptions';
 import NotebookContextRetrieval, {
   STARTING_TEXTBOOK_CONTEXT
 } from './helpers/context/notebookContextRetrieval';
+import { devLog } from './helpers/devLog';
 import { makeAPIRequest } from './helpers/makeAPIRequest';
 import { PluginConfig } from './schemas/config';
 import { useJupytutorReactState } from './store';
-import { ChatInput } from './Components/ChatInput';
-import { TailoredOptions } from './Components/TailoredOptions';
-import {
-  ChatMessage,
-  ChatHistoryItem,
-  StreamingAssistantMessage
-} from './Components/ChatMessage';
 
 export interface JupytutorProps {
   autograderResponse: string | undefined;
@@ -118,11 +117,9 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
           noShow: true
         }
       ];
-      if (DEMO_PRINTS)
-        console.log('[Jupytutor]: Sending textbook with request');
+      devLog(() => 'Sending textbook with request');
     } else {
-      if (DEMO_PRINTS)
-        console.log('[Jupytutor]: NOT sending textbook with request');
+      devLog(() => 'NOT sending textbook with request');
     }
 
     const notebookContext: ChatHistoryItem[] = cells.map(cell => {
@@ -142,10 +139,8 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
           noShow: true
         };
       } else if (cell.type === 'markdown') {
-        if (DEMO_PRINTS)
-          console.log(
-            '[Jupytutor]: Sending free response prompt with request!'
-          );
+        devLog(() => 'Sending free response prompt with request!');
+
         return {
           role: 'system' as const,
           content: [
@@ -275,12 +270,16 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
 
   // Debug chat history changes
   useEffect(() => {
-    if (DEMO_PRINTS)
-      console.log(
-        '[Jupytutor]: Chat history changed.'
-        //, chatHistory
-      );
+    devLog(
+      () => 'Chat history changed.'
+      //, chatHistory
+    );
   }, [chatHistory]);
+
+  const patchKeyCommand750 = usePatchKeyCommand750();
+  const dataProps = patchKeyCommand750
+    ? { 'data-lm-suppress-shortcuts': true }
+    : {};
 
   /**
    * Converts a base64 data URL to a File object
@@ -296,16 +295,20 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
       // Validate data URL format
       if (!dataUrl.startsWith('data:')) {
         // throw new Error('Invalid data URL: must start with "data:"');
-        if (DEMO_PRINTS)
-          console.warn('Invalid data URL: must start with "data:"', dataUrl);
+        devLog.warn(
+          () => 'Invalid data URL: must start with "data:"',
+          () => dataUrl
+        );
         return null;
       }
 
       const [header, base64Data] = dataUrl.split(',');
       if (!base64Data) {
         // throw new Error('Invalid data URL: missing base64 data');
-        if (DEMO_PRINTS)
-          console.warn('Invalid data URL: missing base64 data', dataUrl);
+        devLog.warn(
+          () => 'Invalid data URL: missing base64 data',
+          () => dataUrl
+        );
         return null;
       }
 
@@ -314,11 +317,10 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
 
       // Validate MIME type for images
       if (!mimeType.startsWith('image/')) {
-        if (DEMO_PRINTS)
-          console.warn(
-            `Unexpected MIME type: ${mimeType}, expected image/*`,
-            dataUrl
-          );
+        devLog.warn(
+          () => `Unexpected MIME type: ${mimeType}, expected image/*`,
+          () => dataUrl
+        );
         return null;
       }
 
@@ -333,18 +335,20 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
       // Create File object
       const file = new File([byteArray], filename, { type: mimeType });
 
-      if (DEMO_PRINTS) {
-        console.log(
-          `[Jupytutor]: Created file: ${filename}, type: ${mimeType}, size: ${file.size} bytes`
-        );
-      }
+      devLog(
+        () =>
+          `Created file: ${filename}, type: ${mimeType}, size: ${file.size} bytes`
+      );
 
       return file;
     } catch (error) {
-      console.error('[Jupytutor]: Error converting data URL to File:', error);
-      console.error(
-        '[Jupytutor]: Data URL preview:',
-        dataUrl.substring(0, 100) + '...'
+      devLog.error(
+        () => 'Error converting data URL to File:',
+        () => error
+      );
+      devLog.error(
+        () => 'Data URL preview:',
+        () => dataUrl.substring(0, 100) + '...'
       );
       throw new Error(
         `Invalid data URL format: ${error instanceof Error ? error.message : String(error)}`
@@ -377,9 +381,9 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
     setIsLoading(true);
     const images = gatherImagesFromCells(props.allCells, 10, 5);
 
-    if (DEMO_PRINTS && images.length > 0) {
-      console.log(
-        '[Jupytutor]: Image detected.'
+    if (images.length > 0) {
+      devLog(
+        () => 'Image detected.'
         //images[0].substring(0, 100) + '...'
       );
     }
@@ -504,11 +508,11 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
                     break;
                   }
                 } catch (parseError) {
-                  console.warn(
-                    'Failed to parse SSE data:',
-                    parseError,
-                    'Line:',
-                    line
+                  devLog.error(
+                    () => 'Failed to parse SSE data:',
+                    () => parseError,
+                    () => 'Line:',
+                    () => line
                   );
                 }
               }
@@ -561,52 +565,50 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
     newMessage: string
   ) => {
     if (data?.newChatHistory) {
-      if (DEMO_PRINTS)
-        console.log(
-          '[Jupytutor]: Server returned newChatHistory:'
-          //data.newChatHistory
-        );
+      devLog(
+        () => 'Server returned newChatHistory:',
+        () => data.newChatHistory
+      );
       // Replace the entire chat history with the server response
       let finalChatHistory = data.newChatHistory;
-      if (DEMO_PRINTS)
-        if (firstQuery) {
-          // console.log(
-          //   'finalChatHistory',
-          //   finalChatHistory,
-          //   'firstQuery',
-          //   firstQuery
-          // );
-          // Hide the system reasoning item if present (defensive guard)
-          const idxToHide = finalChatHistory.length - 3;
-          if (
-            idxToHide >= 0 &&
-            idxToHide < finalChatHistory.length &&
-            finalChatHistory[idxToHide]
-          ) {
-            finalChatHistory[idxToHide].noShow = true;
-          }
-
-          // Additionally hide the auto user message (default newMessage) if the backend returns it
-          finalChatHistory = finalChatHistory.map((item: any) => {
-            if (item?.role === 'user') {
-              let text: string | undefined;
-              if (typeof item.content === 'string') {
-                text = item.content;
-              } else if (
-                Array.isArray(item.content) &&
-                item.content.length > 0 &&
-                item.content[0] &&
-                typeof item.content[0].text === 'string'
-              ) {
-                text = item.content[0].text;
-              }
-              if (text === newMessage) {
-                return { ...item, noShow: true };
-              }
-            }
-            return item;
-          });
+      if (firstQuery) {
+        // console.log(
+        //   'finalChatHistory',
+        //   finalChatHistory,
+        //   'firstQuery',
+        //   firstQuery
+        // );
+        // Hide the system reasoning item if present (defensive guard)
+        const idxToHide = finalChatHistory.length - 3;
+        if (
+          idxToHide >= 0 &&
+          idxToHide < finalChatHistory.length &&
+          finalChatHistory[idxToHide]
+        ) {
+          finalChatHistory[idxToHide].noShow = true;
         }
+
+        // Additionally hide the auto user message (default newMessage) if the backend returns it
+        finalChatHistory = finalChatHistory.map((item: any) => {
+          if (item?.role === 'user') {
+            let text: string | undefined;
+            if (typeof item.content === 'string') {
+              text = item.content;
+            } else if (
+              Array.isArray(item.content) &&
+              item.content.length > 0 &&
+              item.content[0] &&
+              typeof item.content[0].text === 'string'
+            ) {
+              text = item.content[0].text;
+            }
+            if (text === newMessage) {
+              return { ...item, noShow: true };
+            }
+          }
+          return item;
+        });
+      }
       setChatHistory(finalChatHistory);
 
       // Only mark initial context as gathered after successful first query
@@ -614,11 +616,10 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
         hasGatheredInitialContext.current = true;
       }
     } else {
-      if (DEMO_PRINTS)
-        console.log(
-          '[Jupytutor]: Chat history not send, appending as fallback',
-          data
-        );
+      devLog(
+        () => 'Chat history not send, appending as fallback',
+        () => data
+      );
       // If server doesn't return newChatHistory, append the assistant response
       // This is a fallback to ensure the conversation continues
       const assistantMessage: ChatHistoryItem = {
@@ -660,7 +661,8 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
   };
 
   return (
-    <div className={`jupytutor ${isLoading ? 'loading' : ''}`}>
+    // Note we can use the same CSS classes from Method 1
+    <div className={`jupytutor ${isLoading ? 'loading' : ''}`} {...dataProps}>
       <div className="chat-container" ref={chatContainerRef}>
         {chatHistory
           .filter(item => !item.noShow)
