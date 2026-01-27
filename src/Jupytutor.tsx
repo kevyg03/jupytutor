@@ -18,7 +18,7 @@ import NotebookContextRetrieval, {
 import { devLog } from './helpers/devLog';
 import { makeAPIRequest } from './helpers/makeAPIRequest';
 import { PluginConfig } from './schemas/config';
-import { useJupytutorReactState } from './store';
+import { useJupytutorReactState, usePatchKeyCommand750 } from './store';
 
 export interface JupytutorProps {
   autograderResponse: string | undefined;
