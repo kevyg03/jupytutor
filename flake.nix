@@ -46,12 +46,14 @@
             pip install build twine hatchling hatch-jupyter-builder
             pip install numpy otter-grader datascience
             echo "Installing JupyterLab + kernel in venv"
-            pip install jupyterlab ipykernel
+            pip install jupyterlab ipykernel notebook==7.5.0
+            echo "Installing classic Notebook + enabling server extension"
             python -m ipykernel install --user --name jupytutor-venv --display-name "Jupytutor (venv)"
             # echo "Next: jlpm install"
             jlpm install
             # echo "Then: pip install -e ."
             pip install -e .
+            jupyter server extension enable notebook
             jupyter labextension develop . --overwrite
             echo "jupytutor dev shell ready"
             echo "Run JupyterLab: jupyter lab"

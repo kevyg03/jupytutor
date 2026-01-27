@@ -19,6 +19,7 @@ import parseNB from './helpers/parseNB';
 import { ConfigSchema, PluginConfig } from './schemas/config';
 import { useJupytutorReactState } from './store';
 import { devLog } from './helpers/devLog';
+import { patchKeyCommand750 } from './helpers/patch-keycommand-7.5.0';
 
 // const assertNever = (x: never) => {
 //   throw new Error(`Unexpected value: ${x}`);
@@ -45,6 +46,8 @@ const plugin: JupyterFrontEndPlugin<void> = {
   autoStart: true,
   requires: [INotebookTracker],
   activate: async (app: JupyterFrontEnd, notebookTracker: INotebookTracker) => {
+    patchKeyCommand750(app);
+
     // Get the DataHub user identifier
     const userId = getUserIdentifier();
 
