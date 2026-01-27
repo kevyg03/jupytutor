@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
+import type { Components } from 'react-markdown';
 import '../../style/index.css';
 
 /**
@@ -19,6 +20,54 @@ const useFadeInVisibleState = (delay: number = 100): boolean => {
   }, [delay]);
 
   return isVisible;
+};
+
+/**
+ * Shared ReactMarkdown components configuration for consistent styling
+ * across all message types
+ */
+const markdownComponents: Components = {
+  a: ({ node, ...props }) => (
+    <a
+      className="assistant-link"
+      {...props}
+      target="_blank"
+      rel="noopener noreferrer"
+    />
+  ),
+  h1: ({ node, ...props }) => (
+    <h1
+      style={{
+        fontSize: '1.4em',
+        fontWeight: 'bold',
+        marginTop: '0.8em',
+        marginBottom: '0.4em'
+      }}
+      {...props}
+    />
+  ),
+  h2: ({ node, ...props }) => (
+    <h2
+      style={{
+        fontSize: '1.2em',
+        fontWeight: 'bold',
+        marginTop: '0.8em',
+        marginBottom: '0.4em'
+      }}
+      {...props}
+    />
+  ),
+  h3: ({ node, ...props }) => (
+    <h3
+      style={{
+        fontSize: '1.1em',
+        fontWeight: 'bold',
+        marginTop: '0.6em',
+        marginBottom: '0.3em'
+      }}
+      {...props}
+    />
+  )
 };
 
 export interface ChatHistoryItem {
@@ -63,7 +112,11 @@ const UserMessage = (props: ChatBubbleProps): JSX.Element => {
     <div
       className={`chat-bubble chat-bubble-${position} ${isVisible ? 'chat-bubble-visible' : ''}`}
     >
-      <div className="chat-message">{message}</div>
+      <div className="chat-message">
+        {/* <ReactMarkdown components={markdownComponents}> */}
+        {message}
+        {/* </ReactMarkdown> */}
+      </div>
       {timestamp && <div className="chat-timestamp">{timestamp}</div>}
     </div>
   );
@@ -80,59 +133,11 @@ const AssistantMessage = (props: AssistantMessageProps): JSX.Element => {
   const fadeInVisible = useFadeInVisibleState(100);
   const isVisible = shouldFadeIn ? fadeInVisible : true;
 
-  console.log(message);
-
   return (
     <div
       className={`assistant-message ${isVisible ? 'assistant-visible' : ''} ${streaming === 'streaming' ? 'assistant-streaming' : ''}`}
     >
-      <ReactMarkdown
-        components={{
-          a: ({ node, ...props }) => (
-            <a
-              className="assistant-link"
-              {...props}
-              target="_blank"
-              rel="noopener noreferrer"
-            />
-          ),
-          h1: ({ node, ...props }) => (
-            <h1
-              style={{
-                fontSize: '1.4em',
-                fontWeight: 'bold',
-                marginTop: '0.8em',
-                marginBottom: '0.4em'
-              }}
-              {...props}
-            />
-          ),
-          h2: ({ node, ...props }) => (
-            <h2
-              style={{
-                fontSize: '1.2em',
-                fontWeight: 'bold',
-                marginTop: '0.8em',
-                marginBottom: '0.4em'
-              }}
-              {...props}
-            />
-          ),
-          h3: ({ node, ...props }) => (
-            <h3
-              style={{
-                fontSize: '1.1em',
-                fontWeight: 'bold',
-                marginTop: '0.6em',
-                marginBottom: '0.3em'
-              }}
-              {...props}
-            />
-          )
-        }}
-      >
-        {message}
-      </ReactMarkdown>
+      <ReactMarkdown components={markdownComponents}>{message}</ReactMarkdown>
     </div>
   );
 };
