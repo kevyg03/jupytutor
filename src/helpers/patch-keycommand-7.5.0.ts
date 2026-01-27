@@ -1,5 +1,5 @@
 import { JupyterFrontEnd } from '@jupyterlab/application';
-import { devLog } from './dev';
+import { devLog } from './devLog';
 import { useJupytutorReactState } from '../store';
 
 // https://github.com/team-jupytutor/jupytutor/issues/25#issue-3841086723

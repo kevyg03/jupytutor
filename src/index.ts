@@ -18,9 +18,8 @@ import NotebookContextRetrieval, {
 import parseNB from './helpers/parseNB';
 import { ConfigSchema, PluginConfig } from './schemas/config';
 import { useJupytutorReactState } from './store';
+import { devLog } from './helpers/devLog';
 import { patchKeyCommand750 } from './helpers/patch-keycommand-7.5.0';
-
-export const DEMO_PRINTS = true;
 
 // const assertNever = (x: never) => {
 //   throw new Error(`Unexpected value: ${x}`);
@@ -33,7 +32,7 @@ export const DEMO_PRINTS = true;
 const getUserIdentifier = (): string | null => {
   const pathname = window.location.pathname;
   // Match DataHub-style URLs: /user/<username>/...
-  const match = pathname.match(/\/user\/([^\/]+)/);
+  const match = pathname.match(/\/user\/([^/]+)/);
   return match ? match[1] : null;
 };
 
@@ -60,9 +59,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         const currentWidget = notebookTracker.currentWidget;
 
         if (!currentWidget) {
-          console.warn(
-            '[Jupytutor]: No active notebook found for context gathering'
-          );
+          console.warn('No active notebook found for context gathering');
           return;
         }
 
@@ -72,9 +69,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         const notebook = currentWidget.content;
         const notebookModel = notebook.model;
         if (!notebookModel) {
-          console.warn(
-            '[Jupytutor]: No notebook model found for context gathering'
-          );
+          console.warn('No notebook model found for context gathering');
           return;
         }
 
@@ -85,53 +80,53 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
         // Skip context gathering if activation flag criteria not met
         if (!pluginEnabled) {
-          if (DEMO_PRINTS) {
-            console.log(
-              '[Jupytutor]: Activation flag not found in notebook. Skipping context gathering.'
-            );
-          }
+          devLog(
+            () =>
+              'Activation flag not found in notebook. Skipping context gathering.'
+          );
           return;
         }
 
         // Parse the notebook to get all cells and their links
         const [allCells, _] = parseNB(notebook);
 
-        if (DEMO_PRINTS) {
-          console.log(
-            '[Jupytutor]: Gathered all cells from notebook on initial load.',
-            allCells
-          );
-        }
+        devLog(
+          () => 'Gathered all cells from notebook on initial load.',
+          () => allCells
+        );
 
         notebookContextRetriever = await parseContextFromNotebook(
           allCells,
           notebookConfig
         );
 
-        if (DEMO_PRINTS) {
-          console.log('[Jupytutor]: Textbook Context Gathering Completed\n');
-          console.log(
-            '[Jupytutor]: Starting Textbook Prompt:\n',
-            STARTING_TEXTBOOK_CONTEXT
-          );
-          console.log(
-            '[Jupytutor]: Textbook Context Snippet:\n',
+        devLog(() => 'Textbook Context Gathering Completed\n');
+
+        devLog(
+          () => 'Starting Textbook Prompt:\n',
+          () => STARTING_TEXTBOOK_CONTEXT
+        );
+
+        devLog(
+          () => 'Textbook Context Snippet:\n',
+          async () =>
             (await notebookContextRetriever?.getContext())?.substring(
               STARTING_TEXTBOOK_CONTEXT.length,
               STARTING_TEXTBOOK_CONTEXT.length + 500
             )
-          );
-          console.log(
-            '[Jupytutor]: Textbook Context Length:\n',
-            (await notebookContextRetriever?.getContext())?.length
-          );
-          console.log(
-            '[Jupytutor]: Textbook Source Links:\n',
-            await notebookContextRetriever?.getSourceLinks()
-          );
-        }
+        );
+
+        devLog(
+          () => 'Textbook Context Length:\n',
+          async () => (await notebookContextRetriever?.getContext())?.length
+        );
+
+        devLog(
+          () => 'Textbook Source Links:\n',
+          async () => await notebookContextRetriever?.getSourceLinks()
+        );
       } catch (error) {
-        console.error('[Jupytutor]: Error gathering context:', error);
+        console.error('Error gathering context:', error);
       }
     };
 
@@ -155,15 +150,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
       ) => {
         const notebookModel = notebook.model;
         if (!notebookModel) {
-          console.warn(
-            '[Jupytutor]: No notebook model found during cell execution.'
-          );
+          console.warn('No notebook model found during cell execution.');
           return;
         }
 
         const notebookConfig = loadConfiguration(notebookModel);
 
-        // if (DEMO_PRINTS) console.log({ notebookConfig });
+        devLog(() => ({ notebookConfig }));
 
         if (!notebookConfig.pluginEnabled) {
           // NEVER DO ANYTHING IF THE ACTIVATION FLAG IS NOT MET, NO MATTER WHAT
@@ -178,7 +171,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
           cellIndex,
           notebookConfig.rules
         );
-        // if (DEMO_PRINTS) console.log({ cellConfig });
+        devLog(() => ({ cellConfig }));
 
         const proactiveEnabledForSession =
           notebookConfig.preferences.proactiveEnabled;
@@ -249,9 +242,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
               jupytutor.update();
             });
           } else {
-            console.warn(
-              '[Jupytutor]: Unknown cell type; not adding Jupytutor widget.'
-            );
+            console.warn('Unknown cell type; not adding Jupytutor widget.');
           }
         }
       }

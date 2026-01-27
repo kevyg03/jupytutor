@@ -1,5 +1,5 @@
-import { DEMO_PRINTS } from '../..';
 import { PluginConfig } from '../../schemas/config';
+import { devLog } from '../devLog';
 import type { ParsedCell } from '../parseNB';
 import NotebookContextRetrieval from './notebookContextRetrieval';
 
@@ -7,7 +7,10 @@ export const parseContextFromNotebook = async (
   notebook: ParsedCell[],
   pluginConfig: PluginConfig
 ) => {
-  console.log('nb parseContextFromNotebook', notebook);
+  devLog(
+    () => 'nb parseContextFromNotebook',
+    () => notebook
+  );
 
   // TODO plugin config type
   // Extract all unique links from all cells
@@ -18,15 +21,16 @@ export const parseContextFromNotebook = async (
     }
   });
 
-  console.log('allLinks', allLinks);
+  devLog(
+    () => 'allLinks',
+    () => allLinks
+  );
 
   const uniqueLinks = Array.from(allLinks);
-  if (DEMO_PRINTS) {
-    console.log(
-      '[Jupytutor]: Gathered unique links from notebook:',
-      uniqueLinks
-    );
-  }
+  devLog(
+    () => 'Gathered unique links from notebook:',
+    () => uniqueLinks
+  );
 
   // Create ContextRetrieval instance with the gathered links
   return new NotebookContextRetrieval({
