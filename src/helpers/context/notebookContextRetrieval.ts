@@ -5,8 +5,17 @@ import { devLog } from '../devLog';
 // add into context
 // export const STARTING_TEXTBOOK_CONTEXT: string =
 //   'The following input is an aggregation of potentially relevant resources to the assignment.\n\n Keep in mind, some are relevant to each particular question, some are not. Each different source is started with its url surrounded by the tokens [LINK] and [/LINK] (e.g. [LINK]https://www.data8.org/[LINK]). Only when completely relevant and necessary, you should attempt to cite these source labels when you use the source contents in your response, formatted as link HTML tags. This should function to encourage student agency and help to not reveal answers directly.';
-export const STARTING_TEXTBOOK_CONTEXT: string =
-  'The following input after this is an aggregation of potentially relevant resources to the assignment.\n\n Keep in mind, some are relevant to each particular question, some are not. Each different source is started with its url surrounded by the tokens [LINK] and [/LINK] (e.g. [LINK]https://www.data8.org/[LINK]). You should attempt to cite these source labels when you use the source contents in your response, formatted as link HTML tags. This should function to encourage student agency and help to not reveal answers directly.';
+// Formatting instructions temporarily pre-pended here for backward compatibility.
+export const STARTING_TEXTBOOK_CONTEXT: string = `
+IMPORTANT - Response Formatting:
+- Use markdown headers (## for h2, ### for h3) for ALL section titles if needed for clarity.
+- Always add blank lines before and after headers
+- Use proper markdown link syntax: [Link Text](URL), NOT <a> or [LINK] tags.
+- Use **bold** or *italic* sparingly and only for emphasis within text (NOT for section headers)
+The following input after this is an aggregation of potentially relevant resources to the assignment.
+Keep in mind, some are relevant to each particular question, some are not. You should attempt to cite sources when you use the source contents in your response, formatted as Markdown links. This should function to encourage student agency and help to not reveal answers directly.
+`;
+
 /**
  * Configuration interface for ContextRetrieval constructor
  */
