@@ -11,10 +11,10 @@ import {
 } from '@jupyterlab/notebook';
 import JupytutorWidget from './Jupytutor';
 import { applyConfigRules } from './helpers/config-rules';
-import { parseContextFromNotebook } from './helpers/context/notebookContextParsing';
-import NotebookContextRetrieval, {
+import { parseGlobalNotebookContextFromNotebook } from './helpers/context/notebookContextParsing';
+import GlobalNotebookContextRetrieval, {
   STARTING_TEXTBOOK_CONTEXT
-} from './helpers/context/notebookContextRetrieval';
+} from './helpers/context/globalNotebookContextRetrieval';
 import parseNB from './helpers/parseNB';
 import { ConfigSchema, PluginConfig } from './schemas/config';
 import { useJupytutorReactState } from './store';
@@ -51,7 +51,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
     // Get the DataHub user identifier
     const userId = getUserIdentifier();
 
-    let notebookContextRetriever: NotebookContextRetrieval | null = null;
+    let notebookContextRetriever: GlobalNotebookContextRetrieval | null = null;
     let pluginEnabled: boolean = false;
 
     const gatherNotebookContext = async () => {
@@ -95,7 +95,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
           () => allCells
         );
 
-        notebookContextRetriever = await parseContextFromNotebook(
+        notebookContextRetriever = await parseGlobalNotebookContextFromNotebook(
           allCells,
           notebookConfig
         );
@@ -189,7 +189,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
             localContextScope: 'upToGrader',
             sendTextbookWithRequest:
               notebookConfig.remoteContextGathering.enabled,
-            notebookContextRetriever,
+            globalNotebookContextRetriever: notebookContextRetriever,
             cellType: 'code',
             userId,
             baseURL: notebookConfig.api.baseURL,

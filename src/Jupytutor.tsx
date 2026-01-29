@@ -5,20 +5,21 @@ import type { ParsedCell, ParsedCellType } from './helpers/parseNB';
 import { ReactWidget } from '@jupyterlab/apputils';
 import { produce } from 'immer';
 import '../style/index.css';
-import { ChatInput } from './Components/ChatInput';
+import { ChatInput } from './components/ChatInput';
 import {
   AssistantMessage,
   ChatHistoryItem,
   ChatMessage
-} from './Components/ChatMessage';
-import { TailoredOptions } from './Components/TailoredOptions';
-import NotebookContextRetrieval, {
+} from './components/ChatMessage';
+import { TailoredOptions } from './components/TailoredOptions';
+import GlobalNotebookContextRetrieval, {
   STARTING_TEXTBOOK_CONTEXT
-} from './helpers/context/notebookContextRetrieval';
+} from './helpers/context/globalNotebookContextRetrieval';
 import { devLog } from './helpers/devLog';
 import { makeAPIRequest } from './helpers/makeAPIRequest';
 import { PluginConfig } from './schemas/config';
 import { useJupytutorReactState, usePatchKeyCommand750 } from './store';
+import { ChatHistory } from './components/ChatHistory';
 
 export interface JupytutorProps {
   autograderResponse: string | undefined;
@@ -31,7 +32,7 @@ export interface JupytutorProps {
     | 'tenAround'
     | 'none';
   sendTextbookWithRequest: boolean;
-  notebookContextRetriever: NotebookContextRetrieval | null;
+  globalNotebookContextRetriever: GlobalNotebookContextRetrieval | null;
   cellType: ParsedCellType;
   userId: string | null;
   baseURL: string;
@@ -69,9 +70,8 @@ const getCodeCellOutputAsLLMContent = (
 };
 
 export const Jupytutor = (props: JupytutorProps): JSX.Element => {
-  const STARTING_MESSAGE = '';
-  const [inputValue, setInputValue] = useState(STARTING_MESSAGE);
-  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const [inputValue, setInputValue] = useState('');
+
   const hasGatheredInitialContext = useRef(false);
   const initialContextData = useRef<ChatHistoryItem[]>([]);
 
@@ -80,7 +80,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
 
   const {
     sendTextbookWithRequest,
-    notebookContextRetriever: contextRetriever,
+    globalNotebookContextRetriever: contextRetriever,
     cellType,
     userId,
     baseURL,
@@ -252,30 +252,6 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
   const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Auto-scroll to bottom when new messages are added
-  useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop =
-        chatContainerRef.current.scrollHeight;
-    }
-  }, [chatHistory]);
-
-  // Auto-scroll to bottom when streaming content updates
-  useEffect(() => {
-    if (chatContainerRef.current && liveResult) {
-      chatContainerRef.current.scrollTop =
-        chatContainerRef.current.scrollHeight;
-    }
-  }, [liveResult]);
-
-  // Debug chat history changes
-  useEffect(() => {
-    devLog(
-      () => 'Chat history changed.'
-      //, chatHistory
-    );
-  }, [chatHistory]);
-
   const patchKeyCommand750 = usePatchKeyCommand750();
   const dataProps = patchKeyCommand750
     ? { 'data-lm-suppress-shortcuts': true }
@@ -359,7 +335,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
   const autoNewMessage =
     'This is my current attempt at the question. Focus on providing concise and accurate feedback that promotes understanding.';
   const queryAPI = async (forceSuggestion?: string) => {
-    const noInput = inputValue === STARTING_MESSAGE && !forceSuggestion;
+    const noInput = inputValue === '' && !forceSuggestion;
     const firstQuery = chatHistory.length === 0;
     if (noInput && !firstQuery) return;
 
@@ -637,18 +613,6 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
     }
   };
 
-  // TODO - this is disabled in the default config - decide whether to keep it around
-  // useEffect(() => {
-  //   if (
-  //     config.usage.automatic_first_query_on_error &&
-  //     cellType === 'code' &&
-  //     chatHistory.length === 0
-  //   ) {
-  //     queryAPI();
-  //     setInputValue('Generating analysis...');
-  //   }
-  // }, []);
-
   const callSuggestion = (suggestion: string) => {
     if (isLoading) return;
     setInputValue(suggestion);
@@ -661,19 +625,8 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
   };
 
   return (
-    // Note we can use the same CSS classes from Method 1
     <div className={`jupytutor ${isLoading ? 'loading' : ''}`} {...dataProps}>
-      <div className="chat-container" ref={chatContainerRef}>
-        {chatHistory
-          .filter(item => !item.noShow)
-          .map((item, index) => (
-            <ChatMessage {...item} index={index} />
-          ))}
-        {/**The above handles the ChatHistory. Below handles a new streaming message.*/}
-        {liveResult && (
-          <AssistantMessage message={liveResult} streaming={'streaming'} />
-        )}
-      </div>
+      <ChatHistory chatHistory={chatHistory} liveResult={liveResult} />
 
       {quickResponses.length > 0 && (
         <TailoredOptions
@@ -714,7 +667,7 @@ class JupytutorWidget extends ReactWidget {
       activeIndex: -1,
       localContextScope: 'upToGrader',
       sendTextbookWithRequest: false,
-      notebookContextRetriever: null,
+      globalNotebookContextRetriever: null,
       cellType: 'code',
       userId: null,
       baseURL: '',
