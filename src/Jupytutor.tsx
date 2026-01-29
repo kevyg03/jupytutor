@@ -7,9 +7,9 @@ import { produce } from 'immer';
 import '../style/index.css';
 import { ChatInput } from './Components/ChatInput';
 import {
+  AssistantMessage,
   ChatHistoryItem,
-  ChatMessage,
-  StreamingAssistantMessage
+  ChatMessage
 } from './Components/ChatMessage';
 import { TailoredOptions } from './Components/TailoredOptions';
 import NotebookContextRetrieval, {
@@ -670,7 +670,9 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
             <ChatMessage {...item} index={index} />
           ))}
         {/**The above handles the ChatHistory. Below handles a new streaming message.*/}
-        <StreamingAssistantMessage liveResult={liveResult} />
+        {liveResult && (
+          <AssistantMessage message={liveResult} streaming={'streaming'} />
+        )}
       </div>
 
       {quickResponses.length > 0 && (

@@ -127,41 +127,22 @@ interface AssistantMessageProps {
   streaming: 'none' | 'streamed' | 'streaming';
 }
 
-const AssistantMessage = (props: AssistantMessageProps): JSX.Element => {
+export const AssistantMessage = (props: AssistantMessageProps): JSX.Element => {
   const { message, streaming } = props;
   const shouldFadeIn = streaming === 'none';
   const fadeInVisible = useFadeInVisibleState(100);
   const isVisible = shouldFadeIn ? fadeInVisible : true;
 
   return (
-    <div
-      className={`assistant-message ${isVisible ? 'assistant-visible' : ''} ${streaming === 'streaming' ? 'assistant-streaming' : ''}`}
-    >
-      <ReactMarkdown components={markdownComponents}>{message}</ReactMarkdown>
-    </div>
-  );
-};
-
-interface StreamingAssistantMessageProps {
-  liveResult: string | null;
-}
-
-export const StreamingAssistantMessage = (
-  props: StreamingAssistantMessageProps
-): JSX.Element | null => {
-  if (!props.liveResult) return null;
-
-  return (
     <div className="chat-message-wrapper">
       <div className="chat-sender-label assistant">JupyTutor</div>
       <div className="streaming-message">
-        <AssistantMessage message={props.liveResult} streaming="streaming" />
-        <div className="streaming-indicator">
-          <div className="typing-dots">
-            <span></span>
-            <span></span>
-            <span></span>
-          </div>
+        <div
+          className={`assistant-message ${isVisible ? 'assistant-visible' : ''} ${streaming === 'streaming' ? 'assistant-streaming' : ''}`}
+        >
+          <ReactMarkdown components={markdownComponents}>
+            {message}
+          </ReactMarkdown>
         </div>
       </div>
     </div>
