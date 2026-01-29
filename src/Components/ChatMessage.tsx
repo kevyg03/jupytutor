@@ -135,7 +135,6 @@ export const AssistantMessage = (props: AssistantMessageProps): JSX.Element => {
 
   return (
     <div className="chat-message-wrapper">
-      <div className="chat-sender-label assistant">JupyTutor</div>
       <div className="streaming-message">
         <div
           className={`assistant-message ${isVisible ? 'assistant-visible' : ''} ${streaming === 'streaming' ? 'assistant-streaming' : ''}`}
