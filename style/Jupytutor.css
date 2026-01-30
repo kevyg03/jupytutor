@@ -184,7 +184,6 @@
 
 /* Chat Bubble Styles */
 .chat-container {
-  margin-top: 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
