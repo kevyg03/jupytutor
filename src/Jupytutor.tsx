@@ -8,13 +8,14 @@ import { ChatHistory } from './components/ChatHistory';
 import { ChatInput } from './components/ChatInput';
 import { TailoredOptions } from './components/TailoredOptions';
 import { useQueryAPIFunction } from './helpers/api/chat-api';
-import GlobalNotebookContextRetrieval from './helpers/context/globalNotebookContextRetrieval';
+import GlobalNotebookContextRetrieval from './helpers/prompt-context/globalNotebookContextRetrieval';
 import { PluginConfig } from './schemas/config';
 import {
   useJupytutorReactState,
   usePatchKeyCommand750,
   useWidgetState
 } from './store';
+import { CellContextProvider } from './context/cell-context';
 
 export interface JupytutorProps {
   autograderResponse: string | undefined;
@@ -33,11 +34,9 @@ export interface JupytutorProps {
 
 export const Jupytutor = (props: JupytutorProps): JSX.Element => {
   const notebookConfig = useJupytutorReactState(state => state.notebookConfig);
-  const widgetState = useWidgetState(props.cellId);
-  console.log({ widgetState });
+  const widgetState = useWidgetState();
 
   const {
-    cellId,
     sendTextbookWithRequest,
     globalNotebookContextRetriever,
     baseURL,
@@ -53,11 +52,6 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
 
   // TODO: clean this up
   const queryAPI = useQueryAPIFunction(
-    // chatHistory,
-    // setChatHistory,
-    // setLiveResult,
-    // setIsLoading,
-    cellId,
     allCells,
     props.activeIndex,
     sendTextbookWithRequest,
@@ -142,7 +136,10 @@ class JupytutorWidget extends ReactWidget {
   render(): JSX.Element {
     return (
       <QueryClientProvider client={this.queryClient}>
-        <Jupytutor {...this.props} />
+        <CellContextProvider value={{ cellId: this.props.cellId }}>
+          {this.props.cellId}
+          <Jupytutor {...this.props} />
+        </CellContextProvider>
       </QueryClientProvider>
     );
   }

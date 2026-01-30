@@ -1,4 +1,4 @@
-import GlobalNotebookContextRetrieval from '../helpers/context/globalNotebookContextRetrieval.js';
+import GlobalNotebookContextRetrieval from '../helpers/prompt-context/globalNotebookContextRetrieval.js';
 
 const sourceLinks = [
   'https://www.data8.org/fa24/reference/',

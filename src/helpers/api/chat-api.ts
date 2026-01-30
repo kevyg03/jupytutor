@@ -4,7 +4,7 @@ import z from 'zod';
 import { ChatHistoryItem } from '../../components/ChatMessage';
 import GlobalNotebookContextRetrieval, {
   STARTING_TEXTBOOK_CONTEXT
-} from '../context/globalNotebookContextRetrieval';
+} from '../prompt-context/globalNotebookContextRetrieval';
 import { devLog } from '../devLog';
 import { ParsedCell } from '../parseNB';
 import { useChatHistory, useIsLoading, useLiveResult } from '../../store';
@@ -108,11 +108,6 @@ const getFilenameForImage = (image: string, index: number) => {
 };
 
 export const useQueryAPIFunction = (
-  cellId: string,
-  // chatHistory: ChatHistoryItem[],
-  // setChatHistory: React.Dispatch<React.SetStateAction<ChatHistoryItem[]>>,
-  // setLiveResult: React.Dispatch<React.SetStateAction<string | null>>,
-  // setIsLoading: React.Dispatch<React.SetStateAction<boolean>>,
   allCells: ParsedCell[],
   relativeTo: number,
   sendTextbookWithRequest: boolean,
@@ -141,9 +136,9 @@ export const useQueryAPIFunction = (
     }
   });
 
-  const [chatHistory, setChatHistory] = useChatHistory(cellId);
-  const [, setLiveResult] = useLiveResult(cellId);
-  const [, setIsLoading] = useIsLoading(cellId);
+  const [chatHistory, setChatHistory] = useChatHistory();
+  const [, setLiveResult] = useLiveResult();
+  const [, setIsLoading] = useIsLoading();
 
   const queryAPI = useCallback(
     async (chatInput: string) => {
@@ -153,9 +148,9 @@ export const useQueryAPIFunction = (
         content: chatInput
       };
       const eagerUpdatedChatHistory = [...chatHistory, userMessage];
-      setChatHistory(cellId, eagerUpdatedChatHistory);
+      setChatHistory(eagerUpdatedChatHistory);
 
-      setIsLoading(cellId, true);
+      setIsLoading(true);
       const images = gatherImagesFromCells(allCells, relativeTo, 10, 5);
 
       if (images.length > 0) {
@@ -181,7 +176,7 @@ export const useQueryAPIFunction = (
         });
 
         // Use streaming request
-        setLiveResult(cellId, ''); // Clear previous live result
+        setLiveResult(''); // Clear previous live result
 
         // Create FormData for streaming request
         const formData = new FormData();
@@ -240,7 +235,7 @@ export const useQueryAPIFunction = (
 
                   if (data.type === 'message_delta') {
                     currentMessage += data.content;
-                    setLiveResult(cellId, currentMessage);
+                    setLiveResult(currentMessage);
                   } else if (data.type === 'final_response') {
                     // Complete message received - add to chat history
 
@@ -250,8 +245,8 @@ export const useQueryAPIFunction = (
                       })
                       .parse(data.data);
 
-                    setChatHistory(cellId, newChatHistory);
-                    setLiveResult(cellId, null); // Clear live result when message is complete
+                    setChatHistory(newChatHistory);
+                    setLiveResult(null); // Clear live result when message is complete
                     break;
                   }
                 } catch (parseError) {
@@ -274,10 +269,10 @@ export const useQueryAPIFunction = (
           () => error
         );
         // Remove user message if request failed
-        setChatHistory(cellId, chatHistory); // from before adding the user message
+        setChatHistory(chatHistory); // from before adding the user message
       }
 
-      setIsLoading(cellId, false);
+      setIsLoading(false);
     },
     [
       chatHistory,

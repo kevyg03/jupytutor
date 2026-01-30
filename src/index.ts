@@ -11,10 +11,10 @@ import {
 } from '@jupyterlab/notebook';
 import JupytutorWidget from './Jupytutor';
 import { applyConfigRules } from './helpers/config-rules';
-import { parseContextFromNotebook } from './helpers/context/notebookContextParsing';
+import { parseContextFromNotebook } from './helpers/prompt-context/notebookContextParsing';
 import GlobalNotebookContextRetrieval, {
   STARTING_TEXTBOOK_CONTEXT
-} from './helpers/context/globalNotebookContextRetrieval';
+} from './helpers/prompt-context/globalNotebookContextRetrieval';
 import parseNB from './helpers/parseNB';
 import { ConfigSchema, PluginConfig } from './schemas/config';
 import { useJupytutorReactState } from './store';
