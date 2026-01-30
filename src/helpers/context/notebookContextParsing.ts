@@ -3,7 +3,7 @@ import { devLog } from '../devLog';
 import type { ParsedCell } from '../parseNB';
 import GlobalNotebookContextRetrieval from './globalNotebookContextRetrieval';
 
-export const parseGlobalNotebookContextFromNotebook = async (
+export const parseContextFromNotebook = async (
   notebook: ParsedCell[],
   pluginConfig: PluginConfig
 ) => {

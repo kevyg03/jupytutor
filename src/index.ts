@@ -11,7 +11,7 @@ import {
 } from '@jupyterlab/notebook';
 import JupytutorWidget from './Jupytutor';
 import { applyConfigRules } from './helpers/config-rules';
-import { parseGlobalNotebookContextFromNotebook } from './helpers/context/notebookContextParsing';
+import { parseContextFromNotebook } from './helpers/context/notebookContextParsing';
 import GlobalNotebookContextRetrieval, {
   STARTING_TEXTBOOK_CONTEXT
 } from './helpers/context/globalNotebookContextRetrieval';
@@ -46,6 +46,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
   autoStart: true,
   requires: [INotebookTracker],
   activate: async (app: JupyterFrontEnd, notebookTracker: INotebookTracker) => {
+    if (!location.href.includes('data8.') && !location.href.includes('prob140.')  &&!location.href.includes('localhost'))
+      return
+    
     patchKeyCommand750(app);
 
     // Get the DataHub user identifier
@@ -95,7 +98,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
           () => allCells
         );
 
-        notebookContextRetriever = await parseGlobalNotebookContextFromNotebook(
+        notebookContextRetriever = await parseContextFromNotebook(
           allCells,
           notebookConfig
         );
@@ -184,9 +187,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
           const jupytutor = new JupytutorWidget({
             autograderResponse: '',
+            cellId: cell.model.id,
             allCells,
             activeIndex,
-            localContextScope: 'upToGrader',
             sendTextbookWithRequest:
               notebookConfig.remoteContextGathering.enabled,
             globalNotebookContextRetriever: notebookContextRetriever,
