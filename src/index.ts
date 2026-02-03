@@ -7,33 +7,112 @@ import {
   INotebookModel,
   INotebookTracker,
   Notebook,
-  NotebookActions
+  NotebookActions,
+  NotebookPanel
 } from '@jupyterlab/notebook';
+import { produce } from 'immer';
+import { isEqual } from 'underscore';
 import JupytutorWidget from './Jupytutor';
 import { applyConfigRules } from './helpers/config-rules';
-import { parseContextFromNotebook } from './helpers/prompt-context/notebookContextParsing';
+import { devLog } from './helpers/devLog';
+import parseNB from './helpers/parseNB';
+import { patchKeyCommand750 } from './helpers/patch-keycommand-7.5.0';
 import GlobalNotebookContextRetrieval, {
   STARTING_TEXTBOOK_CONTEXT
 } from './helpers/prompt-context/globalNotebookContextRetrieval';
-import parseNB from './helpers/parseNB';
+import { parseContextFromNotebook } from './helpers/prompt-context/notebookContextParsing';
 import { ConfigSchema, PluginConfig } from './schemas/config';
 import { useJupytutorReactState } from './store';
-import { devLog } from './helpers/devLog';
-import { patchKeyCommand750 } from './helpers/patch-keycommand-7.5.0';
-
-// const assertNever = (x: never) => {
-//   throw new Error(`Unexpected value: ${x}`);
-// };
 
 /**
  * Helper function to extract the user identifier from DataHub-style URLs
  * @returns The username/identifier from the URL path, or null if not found
  */
-const getUserIdentifier = (): string | null => {
+const getUserIdentifierFromURL = (): string | null => {
   const pathname = window.location.pathname;
   // Match DataHub-style URLs: /user/<username>/...
   const match = pathname.match(/\/user\/([^/]+)/);
   return match ? match[1] : null;
+};
+
+const parseConfiguration = (config: unknown): PluginConfig => {
+  return ConfigSchema.parse(config);
+};
+
+const loadConfigurationFromNotebookModel = (notebookModel: INotebookModel) => {
+  const rawConfig = notebookModel.getMetadata('jupytutor') ?? {};
+  return parseConfiguration(rawConfig);
+};
+
+const attachNotebookMetadata = (
+  notebookPath: string,
+  notebookModel: INotebookModel
+) => {
+  useJupytutorReactState.setState(
+    produce(draft => {
+      if (!draft.notebookStateByPath[notebookPath]) {
+        draft.notebookStateByPath[notebookPath] = {
+          widgetStateByCellId: {},
+          notebookConfig: null
+        };
+      }
+
+      draft.notebookStateByPath[notebookPath].notebookConfig =
+        loadConfigurationFromNotebookModel(notebookModel);
+    })
+  );
+
+  const slot: Parameters<typeof notebookModel.metadataChanged.connect>[0] = (
+    _,
+    update
+  ) => {
+    if (update.key !== 'jupytutor') return;
+
+    devLog(
+      () => 'jupytutor metadata changed',
+      () => ({ update })
+    );
+
+    useJupytutorReactState.setState(
+      produce(draft => {
+        if (!draft.notebookStateByPath[notebookPath]) {
+          draft.notebookStateByPath[notebookPath] = {
+            widgetStateByCellId: {},
+            notebookConfig: null
+          };
+        }
+
+        draft.notebookStateByPath[notebookPath].notebookConfig =
+          parseConfiguration(update.newValue);
+      })
+    );
+  };
+  notebookModel.metadataChanged.connect(slot);
+
+  // important to make sure this doesn't overwrite with a default 'on'
+  //   or really overwrite at all if we haven't already loaded once from the nb
+  const zustandUnsubscribe = useJupytutorReactState.subscribe(
+    state => state.notebookStateByPath[notebookPath]?.notebookConfig,
+    notebookConfig => {
+      if (!notebookModel.getMetadata('jupytutor')) {
+        // the notebook config might be a loaded default. we shouldn't write it
+        // unless the notebook already had some jupytutor config
+        return;
+      }
+
+      notebookModel.setMetadata('jupytutor', notebookConfig);
+    },
+    {
+      // this isn't great perf-wise, but I want to prevent echoes
+      // (I think Jupyter actually prevents echoes already, but don't want to risk it)
+      equalityFn: isEqual
+    }
+  );
+
+  return () => {
+    notebookModel.metadataChanged.disconnect(slot);
+    zustandUnsubscribe();
+  };
 };
 
 /**
@@ -62,31 +141,43 @@ const plugin: JupyterFrontEndPlugin<void> = {
     patchKeyCommand750(app);
 
     // Get the DataHub user identifier
-    const userId = getUserIdentifier();
+    const userId = getUserIdentifierFromURL();
 
     let notebookContextRetriever: GlobalNotebookContextRetrieval | null = null;
     let pluginEnabled: boolean = false;
 
-    const gatherNotebookContext = async () => {
+    const attachNotebook = async (
+      notebookTracker: INotebookTracker,
+      notebookPanel: NotebookPanel | null
+    ) => {
       try {
-        const currentWidget = notebookTracker.currentWidget;
-
-        if (!currentWidget) {
+        if (!notebookPanel) {
           console.warn('No active notebook found for context gathering');
           return;
         }
 
-        await currentWidget.context.ready;
-        await currentWidget.revealed;
+        devLog(
+          () => 'Notebook path:',
+          () => notebookPanel.context.path
+        );
 
-        const notebook = currentWidget.content;
+        await notebookPanel.context.ready;
+        await notebookPanel.revealed;
+
+        const notebook = notebookPanel.content;
         const notebookModel = notebook.model;
         if (!notebookModel) {
           console.warn('No notebook model found for context gathering');
           return;
         }
 
-        const notebookConfig = loadConfiguration(notebookModel);
+        const detachMetadata = attachNotebookMetadata(
+          notebookPanel.context.path,
+          notebookModel
+        );
+
+        const notebookConfig =
+          loadConfigurationFromNotebookModel(notebookModel);
 
         // TODO: listen for changes
         pluginEnabled = notebookConfig.pluginEnabled;
@@ -138,17 +229,21 @@ const plugin: JupyterFrontEndPlugin<void> = {
           () => 'Textbook Source Links:\n',
           async () => await notebookContextRetriever?.getSourceLinks()
         );
+
+        // TODO use this detach
+        return detachMetadata;
       } catch (error) {
+        // TODO finally return detach
         console.error('Error gathering context:', error);
       }
     };
 
     // Gather context when a notebook is opened or becomes active
-    notebookTracker.currentChanged.connect(gatherNotebookContext);
+    notebookTracker.currentChanged.connect(attachNotebook);
 
     // Also gather context immediately if there's already an active notebook
     if (notebookTracker.currentWidget) {
-      gatherNotebookContext();
+      attachNotebook(notebookTracker, notebookTracker.currentWidget);
     }
 
     // Listen for the execution of a cell. [1, 3, 6]
@@ -167,11 +262,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
           return;
         }
 
-        const notebookConfig = loadConfiguration(notebookModel);
+        const notebookPath = notebookTracker.currentWidget?.context.path ?? '';
 
-        devLog(() => ({ notebookConfig }));
+        const notebookConfig =
+          useJupytutorReactState.getState().notebookStateByPath[notebookPath]
+            .notebookConfig;
 
-        if (!notebookConfig.pluginEnabled) {
+        if (!notebookConfig || !notebookConfig.pluginEnabled) {
           // NEVER DO ANYTHING IF THE ACTIVATION FLAG IS NOT MET, NO MATTER WHAT
           return;
         }
@@ -196,8 +293,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
           const [allCells, activeIndex] = parseNB(notebook);
 
           const jupytutor = new JupytutorWidget({
-            autograderResponse: '',
             cellId: cell.model.id,
+            // TODO i don't love that this is using a global. can we get the path from the listener?
+            notebookPath,
             allCells,
             activeIndex,
             sendTextbookWithRequest:
@@ -207,12 +305,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
             userId,
             baseURL: notebookConfig.api.baseURL,
             instructorNote: cellConfig.instructorNote,
-            quickResponses: cellConfig.quickResponses,
-            setNotebookConfig: (newConfig: PluginConfig) => {
-              // todo possibly put this function in the zustand state, too
-              notebookModel.setMetadata('jupytutor', newConfig);
-              loadConfiguration(notebookModel);
-            }
+            quickResponses: cellConfig.quickResponses
           });
 
           // TODO: rejig 'active cell' logic
@@ -261,14 +354,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
       }
     );
   }
-};
-
-const loadConfiguration = (notebookModel: INotebookModel) => {
-  const rawConfig = notebookModel.getMetadata('jupytutor') ?? {};
-  const notebookConfig = ConfigSchema.parse(rawConfig);
-  // reload into Zustand store
-  useJupytutorReactState.setState({ notebookConfig });
-  return notebookConfig;
 };
 
 export default plugin;

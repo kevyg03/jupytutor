@@ -7,19 +7,22 @@ import '../style/index.css';
 import { ChatHistory } from './components/ChatHistory';
 import { ChatInput } from './components/ChatInput';
 import { TailoredOptions } from './components/TailoredOptions';
+import {
+  CellContextProvider,
+  NotebookContextProvider
+} from './context/notebook-cell-context';
 import { useQueryAPIFunction } from './helpers/api/chat-api';
 import GlobalNotebookContextRetrieval from './helpers/prompt-context/globalNotebookContextRetrieval';
 import { PluginConfig } from './schemas/config';
 import {
-  useJupytutorReactState,
+  useNotebookConfig,
   usePatchKeyCommand750,
   useWidgetState
 } from './store';
-import { CellContextProvider } from './context/cell-context';
 
 export interface JupytutorProps {
-  autograderResponse: string | undefined;
   cellId: string;
+  notebookPath: string;
   allCells: ParsedCell[];
   activeIndex: number;
   sendTextbookWithRequest: boolean;
@@ -29,11 +32,10 @@ export interface JupytutorProps {
   baseURL: string;
   instructorNote: string | null;
   quickResponses: string[];
-  setNotebookConfig: (newConfig: PluginConfig) => void;
 }
 
 export const Jupytutor = (props: JupytutorProps): JSX.Element => {
-  const notebookConfig = useJupytutorReactState(state => state.notebookConfig);
+  const [notebookConfig, setNotebookConfig] = useNotebookConfig();
   const widgetState = useWidgetState();
 
   const {
@@ -91,14 +93,18 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
         onSubmit={callChatInput}
         isLoading={widgetState.isLoading}
         setProactiveEnabled={(enabled: boolean) => {
-          props.setNotebookConfig(
-            produce(notebookConfig, (draft: PluginConfig) => {
-              if (!draft.preferences) {
-                draft.preferences = { proactiveEnabled: enabled };
-                return;
+          setNotebookConfig(
+            produce(
+              // TODO
+              notebookConfig ?? ({} as PluginConfig),
+              (draft: PluginConfig) => {
+                if (!draft.preferences) {
+                  draft.preferences = { proactiveEnabled: enabled };
+                  return;
+                }
+                draft.preferences.proactiveEnabled = enabled;
               }
-              draft.preferences.proactiveEnabled = enabled;
-            })
+            )
           );
         }}
       />
@@ -113,8 +119,8 @@ class JupytutorWidget extends ReactWidget {
 
   constructor(
     props: JupytutorProps = {
-      autograderResponse: undefined,
       cellId: '',
+      notebookPath: '',
       allCells: [],
       activeIndex: -1,
       sendTextbookWithRequest: false,
@@ -123,8 +129,7 @@ class JupytutorWidget extends ReactWidget {
       userId: null,
       baseURL: '',
       instructorNote: null,
-      quickResponses: [],
-      setNotebookConfig: () => {}
+      quickResponses: []
     }
   ) {
     super();
@@ -136,10 +141,13 @@ class JupytutorWidget extends ReactWidget {
   render(): JSX.Element {
     return (
       <QueryClientProvider client={this.queryClient}>
-        <CellContextProvider value={{ cellId: this.props.cellId }}>
-          {this.props.cellId}
-          <Jupytutor {...this.props} />
-        </CellContextProvider>
+        <NotebookContextProvider
+          value={{ notebookPath: this.props.notebookPath }}
+        >
+          <CellContextProvider value={{ cellId: this.props.cellId }}>
+            <Jupytutor {...this.props} />
+          </CellContextProvider>
+        </NotebookContextProvider>
       </QueryClientProvider>
     );
   }

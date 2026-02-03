@@ -1,8 +1,9 @@
-import { produce } from 'immer';
+import { Draft, produce } from 'immer';
 import { useMemo } from 'react';
 import { create } from 'zustand';
+import { subscribeWithSelector } from 'zustand/middleware';
 import { ChatHistoryItem } from './components/ChatMessage';
-import { useCellId } from './context/cell-context';
+import { useCellId, useNotebookPath } from './context/notebook-cell-context';
 import { PluginConfig } from './schemas/config';
 
 export type WidgetState = {
@@ -17,61 +18,117 @@ const DEFAULT_WIDGET_STATE: () => WidgetState = () => ({
   isLoading: false
 });
 
-type JupytutorReactState = {
-  notebookConfig: PluginConfig;
-  patchKeyCommand750: boolean;
-
+type NotebookState = {
   widgetStateByCellId: Record<string, WidgetState>;
-  setChatHistory: (cellId: string) => (chatHistory: ChatHistoryItem[]) => void;
-  setLiveResult: (cellId: string) => (liveResult: string | null) => void;
-  setIsLoading: (cellId: string) => (isLoading: boolean) => void;
+  notebookConfig: PluginConfig | null;
 };
 
-// TODO probably change the scoping on these setters
-export const useJupytutorReactState = create<JupytutorReactState>(set => ({
-  notebookConfig: null! as PluginConfig, // shh
-  patchKeyCommand750: false,
+type JupytutorReactState = {
+  patchKeyCommand750: boolean;
 
-  widgetStateByCellId: {} as Record<string, WidgetState>,
-  setChatHistory: (cellId: string) => (chatHistory: ChatHistoryItem[]) => {
-    set(state => {
-      return produce(state, draft => {
-        if (!draft.widgetStateByCellId[cellId]) {
-          draft.widgetStateByCellId[cellId] = DEFAULT_WIDGET_STATE();
-        }
-        draft.widgetStateByCellId[cellId].chatHistory = chatHistory;
-      });
-    });
-  },
+  notebookStateByPath: Record<string, NotebookState>;
 
-  setLiveResult: (cellId: string) => (liveResult: string | null) => {
-    set(state => {
-      return produce(state, draft => {
-        if (!draft.widgetStateByCellId[cellId]) {
-          draft.widgetStateByCellId[cellId] = DEFAULT_WIDGET_STATE();
-        }
-        draft.widgetStateByCellId[cellId].liveResult = liveResult;
-      });
-    });
-  },
+  setChatHistory: (
+    notebookPath: string
+  ) => (cellId: string) => (chatHistory: ChatHistoryItem[]) => void;
+  setLiveResult: (
+    notebookPath: string
+  ) => (cellId: string) => (liveResult: string | null) => void;
+  setIsLoading: (
+    notebookPath: string
+  ) => (cellId: string) => (isLoading: boolean) => void;
 
-  setIsLoading: (cellId: string) => (isLoading: boolean) => {
-    set(state => {
-      return produce(state, draft => {
-        if (!draft.widgetStateByCellId[cellId]) {
-          draft.widgetStateByCellId[cellId] = DEFAULT_WIDGET_STATE();
-        }
-        draft.widgetStateByCellId[cellId].isLoading = isLoading;
-      });
-    });
+  setNotebookConfig: (
+    notebookPath: string
+  ) => (newConfig: PluginConfig) => void;
+};
+
+const ensureDraftHasNotebookCell = (
+  draft: Draft<JupytutorReactState>,
+  notebookPath: string,
+  cellId: string
+) => {
+  if (!draft.notebookStateByPath[notebookPath]) {
+    draft.notebookStateByPath[notebookPath] = {
+      widgetStateByCellId: {},
+      notebookConfig: null
+    };
   }
-}));
+
+  if (!draft.notebookStateByPath[notebookPath].widgetStateByCellId[cellId]) {
+    draft.notebookStateByPath[notebookPath].widgetStateByCellId[cellId] =
+      DEFAULT_WIDGET_STATE();
+  }
+};
+
+const cellData = (
+  draft: Draft<JupytutorReactState>,
+  notebookPath: string,
+  cellId: string
+) => {
+  ensureDraftHasNotebookCell(draft, notebookPath, cellId);
+  return draft.notebookStateByPath[notebookPath].widgetStateByCellId[cellId];
+};
+
+export const useJupytutorReactState = create<JupytutorReactState>()(
+  subscribeWithSelector(set => ({
+    patchKeyCommand750: false,
+
+    notebookStateByPath: {} as Record<string, NotebookState>,
+    setChatHistory:
+      (notebookPath: string) =>
+      (cellId: string) =>
+      (chatHistory: ChatHistoryItem[]) => {
+        set(state => {
+          return produce(state, draft => {
+            cellData(draft, notebookPath, cellId).chatHistory = chatHistory;
+          });
+        });
+      },
+
+    setLiveResult:
+      (notebookPath: string) =>
+      (cellId: string) =>
+      (liveResult: string | null) => {
+        set(state => {
+          return produce(state, draft => {
+            cellData(draft, notebookPath, cellId).liveResult = liveResult;
+          });
+        });
+      },
+
+    setIsLoading:
+      (notebookPath: string) => (cellId: string) => (isLoading: boolean) => {
+        set(state => {
+          return produce(state, draft => {
+            cellData(draft, notebookPath, cellId).isLoading = isLoading;
+          });
+        });
+      },
+
+    setNotebookConfig: (notebookPath: string) => (newConfig: PluginConfig) => {
+      set(state => {
+        return produce(state, draft => {
+          draft.notebookStateByPath[notebookPath].notebookConfig = newConfig;
+        });
+      });
+    }
+  }))
+);
 
 // @ts-expect-error debug
 window.useJupytutorReactState = useJupytutorReactState;
 
+const useNotebookState = () => {
+  const notebookPath = useNotebookPath();
+  return useJupytutorReactState(
+    state => state.notebookStateByPath[notebookPath]
+  );
+};
+
 export const useNotebookPreferences = () => {
-  return useJupytutorReactState(state => state.notebookConfig.preferences);
+  const [config] = useNotebookConfig();
+  return config?.preferences;
 };
 
 export const usePatchKeyCommand750 = () => {
@@ -79,6 +136,7 @@ export const usePatchKeyCommand750 = () => {
 };
 
 export const useWidgetState = () => {
+  const notebookPath = useNotebookPath();
   const cellId = useCellId();
 
   if (cellId === null) {
@@ -86,8 +144,10 @@ export const useWidgetState = () => {
   }
 
   return (
-    useJupytutorReactState(state => state.widgetStateByCellId[cellId]) ??
-    DEFAULT_WIDGET_STATE()
+    useJupytutorReactState(
+      state =>
+        state.notebookStateByPath[notebookPath]?.widgetStateByCellId[cellId]
+    ) ?? DEFAULT_WIDGET_STATE()
   );
 };
 
@@ -95,12 +155,13 @@ export const useChatHistory = (): [
   ChatHistoryItem[],
   (chatHistory: ChatHistoryItem[]) => void
 ] => {
+  const notebookPath = useNotebookPath();
   const cellId = useCellId();
   const setChatHistory = useJupytutorReactState(state => state.setChatHistory);
   const widgetState = useWidgetState();
   const setChatHistoryCurried = useMemo(
-    () => setChatHistory(cellId),
-    [widgetState, cellId]
+    () => setChatHistory(notebookPath)(cellId),
+    [widgetState, notebookPath, cellId]
   );
 
   return [widgetState.chatHistory, setChatHistoryCurried];
@@ -110,25 +171,40 @@ export const useLiveResult = (): [
   string | null,
   (liveResult: string | null) => void
 ] => {
+  const notebookPath = useNotebookPath();
   const cellId = useCellId();
   const setLiveResult = useJupytutorReactState(state => state.setLiveResult);
   const widgetState = useWidgetState();
   const setLiveResultCurried = useMemo(
-    () => setLiveResult(cellId),
-    [widgetState, cellId]
+    () => setLiveResult(notebookPath)(cellId),
+    [widgetState, notebookPath, cellId]
   );
 
   return [widgetState.liveResult, setLiveResultCurried];
 };
 
 export const useIsLoading = (): [boolean, (isLoading: boolean) => void] => {
+  const notebookPath = useNotebookPath();
   const cellId = useCellId();
   const setIsLoading = useJupytutorReactState(state => state.setIsLoading);
   const widgetState = useWidgetState();
   const setIsLoadingCurried = useMemo(
-    () => setIsLoading(cellId),
-    [widgetState, cellId]
+    () => setIsLoading(notebookPath)(cellId),
+    [widgetState, notebookPath, cellId]
   );
 
   return [widgetState.isLoading, setIsLoadingCurried];
+};
+
+export const useNotebookConfig = () => {
+  const notebookPath = useNotebookPath();
+  const notebookState = useNotebookState();
+  const setNotebookConfig = useJupytutorReactState(
+    state => state.setNotebookConfig
+  );
+  const setNotebookConfigCurried = useMemo(
+    () => setNotebookConfig(notebookPath),
+    [notebookPath]
+  );
+  return [notebookState.notebookConfig, setNotebookConfigCurried] as const;
 };
