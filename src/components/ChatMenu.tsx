@@ -1,6 +1,6 @@
 import { Menu, MenuButton, MenuItem } from '@szhsin/react-menu';
 import { useNotebookPreferences } from '../store';
-import '../../style/index.css';
+import '@szhsin/react-menu/dist/index.css';
 
 interface ChatMenuProps {
   setProactiveEnabled: (enabled: boolean) => void;
