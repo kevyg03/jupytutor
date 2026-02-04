@@ -1,5 +1,3 @@
-import type { ParsedCell, ParsedCellType } from './helpers/parseNB';
-
 import { ReactWidget } from '@jupyterlab/apputils';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { produce } from 'immer';
@@ -12,7 +10,6 @@ import {
   NotebookContextProvider
 } from './context/notebook-cell-context';
 import { useQueryAPIFunction } from './helpers/api/chat-api';
-import GlobalNotebookContextRetrieval from './helpers/prompt-context/globalNotebookContextRetrieval';
 import { PluginConfig } from './schemas/config';
 import {
   useNotebookConfig,
@@ -23,29 +20,19 @@ import {
 export interface JupytutorProps {
   cellId: string;
   notebookPath: string;
-  allCells: ParsedCell[];
   activeIndex: number;
-  sendTextbookWithRequest: boolean;
-  globalNotebookContextRetriever: GlobalNotebookContextRetrieval | null;
-  cellType: ParsedCellType;
-  userId: string | null;
-  baseURL: string;
   instructorNote: string | null;
   quickResponses: string[];
 }
+
+// big TODO -- chat history no longer clears. maybe would be good if there were a way to force-clear?
+// not sure if the chat context is actually updating when we update the cell value
 
 export const Jupytutor = (props: JupytutorProps): JSX.Element => {
   const [notebookConfig, setNotebookConfig] = useNotebookConfig();
   const widgetState = useWidgetState();
 
-  const {
-    sendTextbookWithRequest,
-    globalNotebookContextRetriever,
-    baseURL,
-    instructorNote,
-    allCells,
-    quickResponses
-  } = props;
+  const { activeIndex, instructorNote, quickResponses } = props;
 
   const patchKeyCommand750 = usePatchKeyCommand750();
   const dataProps = patchKeyCommand750
@@ -53,14 +40,7 @@ export const Jupytutor = (props: JupytutorProps): JSX.Element => {
     : {};
 
   // TODO: clean this up
-  const queryAPI = useQueryAPIFunction(
-    allCells,
-    props.activeIndex,
-    sendTextbookWithRequest,
-    baseURL,
-    instructorNote,
-    globalNotebookContextRetriever
-  );
+  const queryAPI = useQueryAPIFunction(activeIndex, instructorNote);
 
   const callSuggestion = async (suggestion: string) => {
     if (widgetState.isLoading) return;
@@ -121,13 +101,7 @@ class JupytutorWidget extends ReactWidget {
     props: JupytutorProps = {
       cellId: '',
       notebookPath: '',
-      allCells: [],
       activeIndex: -1,
-      sendTextbookWithRequest: false,
-      globalNotebookContextRetriever: null,
-      cellType: 'code',
-      userId: null,
-      baseURL: '',
       instructorNote: null,
       quickResponses: []
     }

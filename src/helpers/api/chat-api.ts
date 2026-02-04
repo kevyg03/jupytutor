@@ -7,7 +7,14 @@ import GlobalNotebookContextRetrieval, {
 } from '../prompt-context/globalNotebookContextRetrieval';
 import { devLog } from '../devLog';
 import { ParsedCell } from '../parseNB';
-import { useChatHistory, useIsLoading, useLiveResult } from '../../store';
+import {
+  useChatHistory,
+  useIsLoading,
+  useJupytutorReactState,
+  useLiveResult,
+  useNotebookConfig
+} from '../../store';
+import { useNotebookPath } from '../../context/notebook-cell-context';
 
 /**
  * Converts a base64 data URL to a File object
@@ -108,28 +115,37 @@ const getFilenameForImage = (image: string, index: number) => {
 };
 
 export const useQueryAPIFunction = (
-  allCells: ParsedCell[],
   relativeTo: number,
-  sendTextbookWithRequest: boolean,
-  baseURL: string,
-  instructorNote: string | null,
-  globalNotebookContextRetrieval: GlobalNotebookContextRetrieval | null
+  instructorNote: string | null
 ) => {
+  const notebookPath = useNotebookPath();
+  const parsedCells = useJupytutorReactState(
+    state => state.notebookStateByPath[notebookPath]?.parsedCells ?? []
+  );
+  const [notebookConfig] = useNotebookConfig();
+  const sendTextbookWithRequest =
+    notebookConfig?.remoteContextGathering.enabled ?? false;
+  const baseURL = notebookConfig?.api.baseURL ?? '';
+  const globalNotebookContextRetriever = useJupytutorReactState(
+    state =>
+      state.notebookStateByPath[notebookPath]?.globalNotebookContextRetriever ??
+      null
+  );
+
   const localContext = useQuery({
-    // TODO: make this notebook-relative
     queryKey: [
       'localContext',
-      allCells,
+      parsedCells,
       relativeTo,
-      globalNotebookContextRetrieval,
+      globalNotebookContextRetriever,
       instructorNote
     ],
     queryFn: async () => {
       const context = await gatherLocalContext(
-        allCells,
+        parsedCells,
         relativeTo,
         sendTextbookWithRequest,
-        globalNotebookContextRetrieval,
+        globalNotebookContextRetriever,
         instructorNote
       );
       return context;
@@ -139,6 +155,7 @@ export const useQueryAPIFunction = (
   const [chatHistory, setChatHistory] = useChatHistory();
   const [, setLiveResult] = useLiveResult();
   const [, setIsLoading] = useIsLoading();
+  const userId = useJupytutorReactState(state => state.userId);
 
   const queryAPI = useCallback(
     async (chatInput: string) => {
@@ -151,7 +168,7 @@ export const useQueryAPIFunction = (
       setChatHistory(eagerUpdatedChatHistory);
 
       setIsLoading(true);
-      const images = gatherImagesFromCells(allCells, relativeTo, 10, 5);
+      const images = gatherImagesFromCells(parsedCells, relativeTo, 10, 5);
 
       if (images.length > 0) {
         devLog(
@@ -185,6 +202,7 @@ export const useQueryAPIFunction = (
         formData.append('newMessage', chatInput);
         // TODO: pending server update (prompts come from client); for now, this prompt assumes test failed
         formData.append('cellType', 'grader');
+        formData.append('userId', userId ?? '');
 
         // Add files
         imageFiles
@@ -279,7 +297,11 @@ export const useQueryAPIFunction = (
       setChatHistory,
       setLiveResult,
       setIsLoading,
-      allCells,
+      userId,
+      baseURL,
+      sendTextbookWithRequest,
+      globalNotebookContextRetriever,
+      parsedCells,
       relativeTo,
       localContext,
       sendTextbookWithRequest

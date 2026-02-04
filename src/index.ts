@@ -17,12 +17,10 @@ import { applyConfigRules } from './helpers/config-rules';
 import { devLog } from './helpers/devLog';
 import parseNB from './helpers/parseNB';
 import { patchKeyCommand750 } from './helpers/patch-keycommand-7.5.0';
-import GlobalNotebookContextRetrieval, {
-  STARTING_TEXTBOOK_CONTEXT
-} from './helpers/prompt-context/globalNotebookContextRetrieval';
+import { STARTING_TEXTBOOK_CONTEXT } from './helpers/prompt-context/globalNotebookContextRetrieval';
 import { parseContextFromNotebook } from './helpers/prompt-context/notebookContextParsing';
 import { ConfigSchema, PluginConfig } from './schemas/config';
-import { useJupytutorReactState } from './store';
+import { ensureDraftHasNotebook, useJupytutorReactState } from './store';
 
 /**
  * Helper function to extract the user identifier from DataHub-style URLs
@@ -48,14 +46,9 @@ const attachNotebookMetadata = (
   notebookPath: string,
   notebookModel: INotebookModel
 ) => {
-  useJupytutorReactState.setState(
-    produce(draft => {
-      if (!draft.notebookStateByPath[notebookPath]) {
-        draft.notebookStateByPath[notebookPath] = {
-          widgetStateByCellId: {},
-          notebookConfig: null
-        };
-      }
+  useJupytutorReactState.setState(state =>
+    produce(state, draft => {
+      ensureDraftHasNotebook(draft, notebookPath);
 
       draft.notebookStateByPath[notebookPath].notebookConfig =
         loadConfigurationFromNotebookModel(notebookModel);
@@ -142,12 +135,12 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
     // Get the DataHub user identifier
     const userId = getUserIdentifierFromURL();
+    useJupytutorReactState.setState({ userId });
 
-    let notebookContextRetriever: GlobalNotebookContextRetrieval | null = null;
     let pluginEnabled: boolean = false;
 
     const attachNotebook = async (
-      notebookTracker: INotebookTracker,
+      _notebookTracker: INotebookTracker,
       notebookPanel: NotebookPanel | null
     ) => {
       try {
@@ -192,16 +185,25 @@ const plugin: JupyterFrontEndPlugin<void> = {
         }
 
         // Parse the notebook to get all cells and their links
-        const [allCells, _] = parseNB(notebook);
+        const allCells = parseNB(notebook);
 
         devLog(
           () => 'Gathered all cells from notebook on initial load.',
           () => allCells
         );
 
-        notebookContextRetriever = await parseContextFromNotebook(
+        useJupytutorReactState
+          .getState()
+          .setNotebookParsedCells(notebookPanel.context.path)(allCells);
+
+        const globalNotebookContextRetriever = await parseContextFromNotebook(
           allCells,
           notebookConfig
+        );
+        useJupytutorReactState
+          .getState()
+          .setGlobalNotebookContextRetriever(notebookPanel.context.path)(
+          globalNotebookContextRetriever
         );
 
         devLog(() => 'Textbook Context Gathering Completed\n');
@@ -214,7 +216,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
         devLog(
           () => 'Textbook Context Snippet:\n',
           async () =>
-            (await notebookContextRetriever?.getContext())?.substring(
+            (await globalNotebookContextRetriever?.getContext())?.substring(
               STARTING_TEXTBOOK_CONTEXT.length,
               STARTING_TEXTBOOK_CONTEXT.length + 500
             )
@@ -222,12 +224,13 @@ const plugin: JupyterFrontEndPlugin<void> = {
 
         devLog(
           () => 'Textbook Context Length:\n',
-          async () => (await notebookContextRetriever?.getContext())?.length
+          async () =>
+            (await globalNotebookContextRetriever?.getContext())?.length
         );
 
         devLog(
           () => 'Textbook Source Links:\n',
-          async () => await notebookContextRetriever?.getSourceLinks()
+          async () => await globalNotebookContextRetriever?.getSourceLinks()
         );
 
         // TODO use this detach
@@ -262,6 +265,7 @@ const plugin: JupyterFrontEndPlugin<void> = {
           return;
         }
 
+        // TODO i don't love that this is using a global. can we get the path from the listener?
         const notebookPath = notebookTracker.currentWidget?.context.path ?? '';
 
         const notebookConfig =
@@ -290,20 +294,15 @@ const plugin: JupyterFrontEndPlugin<void> = {
           cellConfig.chatProactive && proactiveEnabledForSession;
 
         if (cellConfig.chatEnabled && proactiveEnabledForCell) {
-          const [allCells, activeIndex] = parseNB(notebook);
+          const allCells = parseNB(notebook);
+          useJupytutorReactState
+            .getState()
+            .setNotebookParsedCells(notebookPath)(allCells);
 
           const jupytutor = new JupytutorWidget({
             cellId: cell.model.id,
-            // TODO i don't love that this is using a global. can we get the path from the listener?
             notebookPath,
-            allCells,
-            activeIndex,
-            sendTextbookWithRequest:
-              notebookConfig.remoteContextGathering.enabled,
-            globalNotebookContextRetriever: notebookContextRetriever,
-            cellType: 'code',
-            userId,
-            baseURL: notebookConfig.api.baseURL,
+            activeIndex: notebook.activeCellIndex,
             instructorNote: cellConfig.instructorNote,
             quickResponses: cellConfig.quickResponses
           });
