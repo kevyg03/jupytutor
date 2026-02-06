@@ -2,11 +2,16 @@ import { Menu, MenuButton, MenuItem } from '@szhsin/react-menu';
 import '@szhsin/react-menu/dist/index.css';
 import { produce } from 'immer';
 import { PluginConfig } from '../schemas/config';
-import { useNotebookConfig, useNotebookPreferences } from '../store';
+import {
+  useChatHistory,
+  useNotebookConfig,
+  useNotebookPreferences
+} from '../store';
 
 // COULD ADD OPTION TO HIDE / MINIMIZE THE CHAT HERE TOO, OR MAKE THIS A SEPARATE BUTTON
 
 export const ChatMenu = () => {
+  const [, setChatHistory] = useChatHistory();
   const [notebookConfig, setNotebookConfig] = useNotebookConfig();
   const proactiveEnabled = useNotebookPreferences()?.proactiveEnabled;
 
@@ -34,6 +39,7 @@ export const ChatMenu = () => {
       direction="top"
       portal
     >
+      <MenuItem onClick={() => setChatHistory([])}>Clear this chat</MenuItem>
       <MenuItem
         onClick={() =>
           setNotebookConfig(

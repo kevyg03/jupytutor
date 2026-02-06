@@ -29,6 +29,7 @@ export const ChatInput = (props: ChatInputProps): JSX.Element => {
 
   return (
     <div className={`chat-input-container ${isLoading ? 'loading' : ''}`}>
+      <ChatMenu />
       <input
         type="text"
         className={`chat-input ${isLoading ? 'loading' : ''}`}
@@ -56,9 +57,6 @@ export const ChatInput = (props: ChatInputProps): JSX.Element => {
           </svg>
         )}
       </button>
-      {/* TODO: i kind of wanted this button to the left, but it overlaps with the output-area-enter click. */}
-      {/* should widget go in output area? */}
-      <ChatMenu />
     </div>
   );
 };
