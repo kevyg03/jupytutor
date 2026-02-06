@@ -5,7 +5,6 @@ import { ChatMenu } from './ChatMenu';
 interface ChatInputProps {
   onSubmit: (input: string) => void;
   isLoading: boolean;
-  setProactiveEnabled: (enabled: boolean) => void;
 }
 
 export const ChatInput = (props: ChatInputProps): JSX.Element => {
@@ -59,7 +58,7 @@ export const ChatInput = (props: ChatInputProps): JSX.Element => {
       </button>
       {/* TODO: i kind of wanted this button to the left, but it overlaps with the output-area-enter click. */}
       {/* should widget go in output area? */}
-      <ChatMenu setProactiveEnabled={props.setProactiveEnabled} />
+      <ChatMenu />
     </div>
   );
 };

@@ -7,14 +7,21 @@ import { useCellId, useNotebookPath } from './context/notebook-cell-context';
 import { PluginConfig } from './schemas/config';
 import { ParsedCell } from './helpers/parseNB';
 import GlobalNotebookContextRetrieval from './helpers/prompt-context/globalNotebookContextRetrieval';
+import { RuleConfigOverride } from './helpers/config-rules';
 
 export type WidgetState = {
+  // this is something of a cache -- we refetch for a particular cell
+  // when it's executed, which is when we consider whether to show for that cell
+  cellConfig: RuleConfigOverride | null;
+
   chatHistory: ChatHistoryItem[];
   liveResult: string | null;
   isLoading: boolean;
 };
 
 const DEFAULT_WIDGET_STATE: () => WidgetState = () => ({
+  cellConfig: null,
+
   chatHistory: [],
   liveResult: null,
   isLoading: false
@@ -43,6 +50,9 @@ type JupytutorReactState = {
   setIsLoading: (
     notebookPath: string
   ) => (cellId: string) => (isLoading: boolean) => void;
+  setRefreshedCellConfig: (
+    notebookPath: string
+  ) => (cellId: string) => (cellConfig: RuleConfigOverride) => void;
 
   setNotebookConfig: (
     notebookPath: string
@@ -124,6 +134,17 @@ export const useJupytutorReactState = create<JupytutorReactState>()(
         set(state => {
           return produce(state, draft => {
             cellData(draft, notebookPath, cellId).isLoading = isLoading;
+          });
+        });
+      },
+
+    setRefreshedCellConfig:
+      (notebookPath: string) =>
+      (cellId: string) =>
+      (cellConfig: RuleConfigOverride) => {
+        set(state => {
+          return produce(state, draft => {
+            cellData(draft, notebookPath, cellId).cellConfig = cellConfig;
           });
         });
       },
@@ -248,4 +269,14 @@ export const useNotebookConfig = () => {
     [notebookPath]
   );
   return [notebookState.notebookConfig, setNotebookConfigCurried] as const;
+};
+
+export const useCellConfig = () => {
+  const notebookPath = useNotebookPath();
+  const cellId = useCellId();
+  const cellState = useJupytutorReactState(
+    state =>
+      state.notebookStateByPath[notebookPath]?.widgetStateByCellId[cellId]
+  );
+  return cellState.cellConfig;
 };

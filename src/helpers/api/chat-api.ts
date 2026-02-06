@@ -2,19 +2,20 @@ import { useQuery } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import z from 'zod';
 import { ChatHistoryItem } from '../../components/ChatMessage';
-import GlobalNotebookContextRetrieval, {
-  STARTING_TEXTBOOK_CONTEXT
-} from '../prompt-context/globalNotebookContextRetrieval';
-import { devLog } from '../devLog';
-import { ParsedCell } from '../parseNB';
+import { useNotebookPath } from '../../context/notebook-cell-context';
 import {
+  useCellConfig,
   useChatHistory,
   useIsLoading,
   useJupytutorReactState,
   useLiveResult,
   useNotebookConfig
 } from '../../store';
-import { useNotebookPath } from '../../context/notebook-cell-context';
+import { devLog } from '../devLog';
+import { ParsedCell } from '../parseNB';
+import GlobalNotebookContextRetrieval, {
+  STARTING_TEXTBOOK_CONTEXT
+} from '../prompt-context/globalNotebookContextRetrieval';
 
 /**
  * Converts a base64 data URL to a File object
@@ -114,10 +115,7 @@ const getFilenameForImage = (image: string, index: number) => {
   }
 };
 
-export const useQueryAPIFunction = (
-  relativeTo: number,
-  instructorNote: string | null
-) => {
+export const useQueryAPIFunction = (relativeTo: number) => {
   const notebookPath = useNotebookPath();
   const parsedCells = useJupytutorReactState(
     state => state.notebookStateByPath[notebookPath]?.parsedCells ?? []
@@ -131,6 +129,7 @@ export const useQueryAPIFunction = (
       state.notebookStateByPath[notebookPath]?.globalNotebookContextRetriever ??
       null
   );
+  const instructorNote = useCellConfig()?.instructorNote ?? null;
 
   const localContext = useQuery({
     queryKey: [
@@ -302,6 +301,7 @@ export const useQueryAPIFunction = (
       sendTextbookWithRequest,
       globalNotebookContextRetriever,
       parsedCells,
+      instructorNote,
       relativeTo,
       localContext,
       sendTextbookWithRequest

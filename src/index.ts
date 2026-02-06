@@ -2,7 +2,7 @@ import {
   JupyterFrontEnd,
   JupyterFrontEndPlugin
 } from '@jupyterlab/application';
-import { Cell, CodeCell } from '@jupyterlab/cells';
+import { Cell, CodeCell, ICellModel } from '@jupyterlab/cells';
 import {
   INotebookModel,
   INotebookTracker,
@@ -106,6 +106,26 @@ const attachNotebookMetadata = (
     notebookModel.metadataChanged.disconnect(slot);
     zustandUnsubscribe();
   };
+};
+
+const refreshCellConfig = (
+  notebookPath: string,
+  notebookModel: INotebookModel,
+  cellModel: ICellModel,
+  notebookConfig: PluginConfig
+) => {
+  const cellIndex = [...notebookModel.cells].findIndex(c => c === cellModel);
+  const cellConfig = applyConfigRules(
+    notebookModel,
+    cellIndex,
+    notebookConfig.rules
+  );
+  useJupytutorReactState.getState().setRefreshedCellConfig(notebookPath)(
+    cellModel.id
+  )(cellConfig);
+  devLog(() => ({ cellConfig }));
+
+  return cellConfig;
 };
 
 /**
@@ -277,15 +297,15 @@ const plugin: JupyterFrontEndPlugin<void> = {
           return;
         }
 
-        const cellIndex = [...notebookModel.cells].findIndex(
-          c => c === cell.model
-        );
-        const cellConfig = applyConfigRules(
+        // TODO - profile this, maybe memoize it
+        //   (to do perfectly, need to react to lots of notebook events... but may
+        //    suffice in practice to react only to cell execution events)
+        const cellConfig = refreshCellConfig(
+          notebookPath,
           notebookModel,
-          cellIndex,
-          notebookConfig.rules
+          cell.model,
+          notebookConfig
         );
-        devLog(() => ({ cellConfig }));
 
         const proactiveEnabledForSession =
           notebookConfig.preferences.proactiveEnabled;
@@ -303,8 +323,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
             cellId: cell.model.id,
             notebookPath,
             activeIndex: notebook.activeCellIndex,
-            instructorNote: cellConfig.instructorNote,
-            quickResponses: cellConfig.quickResponses
           });
 
           // TODO: rejig 'active cell' logic
