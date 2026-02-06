@@ -2,7 +2,7 @@ import {
   JupyterFrontEnd,
   JupyterFrontEndPlugin
 } from '@jupyterlab/application';
-import { Cell, CodeCell, ICellModel } from '@jupyterlab/cells';
+import { Cell, ICellModel } from '@jupyterlab/cells';
 import {
   INotebookModel,
   INotebookTracker,
@@ -126,6 +126,13 @@ const refreshCellConfig = (
   devLog(() => ({ cellConfig }));
 
   return cellConfig;
+};
+
+const refreshNotebookParse = (notebookPath: string, notebook: Notebook) => {
+  const allCells = parseNB(notebook);
+  useJupytutorReactState.getState().setNotebookParsedCells(notebookPath)(
+    allCells
+  );
 };
 
 /**
@@ -314,59 +321,35 @@ const plugin: JupyterFrontEndPlugin<void> = {
           cellConfig.chatProactive && proactiveEnabledForSession;
 
         if (cellConfig.chatEnabled && proactiveEnabledForCell) {
-          const allCells = parseNB(notebook);
-          useJupytutorReactState
-            .getState()
-            .setNotebookParsedCells(notebookPath)(allCells);
+          refreshNotebookParse(notebookPath, notebook);
 
           const jupytutor = new JupytutorWidget({
             cellId: cell.model.id,
             notebookPath,
-            activeIndex: notebook.activeCellIndex,
+            // TODO: rejig 'active cell' logic
+            activeIndex: notebook.activeCellIndex
           });
 
-          // TODO: rejig 'active cell' logic
-
-          if (cell.model.type === 'code') {
-            const codeCell = cell as CodeCell;
-
-            if (codeCell.outputArea && codeCell.outputArea.layout) {
-              (codeCell.outputArea.layout as any).addWidget(jupytutor);
-            }
-          } else if (cell.model.type === 'markdown') {
-            // Check if there's already a JupyTutor widget in this cell and remove it
-            const existingContainer = cell.node.querySelector(
-              '.jp-jupytutor-markdown-container'
-            );
-            if (existingContainer) {
-              existingContainer.remove();
-            }
-
-            // Create a proper container div with React mounting point
-            const container = document.createElement('div');
-            container.className = 'jp-jupytutor-markdown-container';
-            container.style.cssText = `
-          margin-top: 15px;
-          border: 1px solid #e0e0e0;
-          border-radius: 6px;
-          padding: 0;
-          background-color: #ffffff;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        `;
-
-            // Mount the ReactWidget properly
-            container.appendChild(jupytutor.node);
-
-            // Add to the cell
-            cell.node.appendChild(container);
-
-            // Ensure React renders by calling update after DOM insertion
-            requestAnimationFrame(() => {
-              jupytutor.update();
-            });
-          } else {
-            console.warn('Unknown cell type; not adding Jupytutor widget.');
+          // Check if there's already a JupyTutor widget in this cell and remove it
+          const CLASS_NAME = 'jp-jupytutor-container';
+          const existingContainer = cell.node.querySelector(`.${CLASS_NAME}`);
+          if (existingContainer) {
+            existingContainer.remove();
           }
+
+          // Create a proper container div with React mounting point
+          const container = document.createElement('div');
+          container.className = CLASS_NAME;
+
+          container.appendChild(jupytutor.node);
+          cell.node.appendChild(container);
+
+          // Ensure React renders by calling update after DOM insertion
+          requestAnimationFrame(() => {
+            jupytutor.update();
+          });
+        } else {
+          console.warn('Unknown cell type; not adding Jupytutor widget.');
         }
       }
     );
